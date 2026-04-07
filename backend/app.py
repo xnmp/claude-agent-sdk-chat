@@ -1,3 +1,5 @@
+"""FastAPI application — wires concrete implementations to port interfaces."""
+
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
@@ -5,13 +7,27 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import CORS_ORIGINS
-from .db import init_pool, close_pool
+from .db import (
+    PgConversationRepository,
+    PgMessageRepository,
+    PgUserRepository,
+    close_pool,
+    init_pool,
+)
 from .routers import auth, conversations, ws
+from .sdk_manager import SDKManager
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    await init_pool()
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    pool = await init_pool()
+
+    # Wire concrete implementations onto app.state
+    app.state.users = PgUserRepository(pool)
+    app.state.conversations = PgConversationRepository(pool)
+    app.state.messages = PgMessageRepository(pool)
+    app.state.sdk_factory = SDKManager()
+
     yield
     await close_pool()
 

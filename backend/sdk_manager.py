@@ -1,22 +1,49 @@
-"""Manages ClaudeSDKClient instances per active conversation."""
+"""Manages ClaudeSDKClient instances per active conversation.
+
+Implements the SDKClientFactory and SDKClient protocols from ports.py.
+"""
 
 from __future__ import annotations
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
 from .config import AGENT_CWD
+from .ports import SDKClient
+
+
+class ClaudeSDKClientAdapter:
+    """Wraps ClaudeSDKClient to satisfy the SDKClient protocol."""
+
+    def __init__(self, client: ClaudeSDKClient) -> None:
+        self._client = client
+
+    async def connect(self) -> None:
+        await self._client.connect()
+
+    async def query(self, content: str) -> None:
+        await self._client.query(content)
+
+    async def interrupt(self) -> None:
+        await self._client.interrupt()
+
+    async def disconnect(self) -> None:
+        await self._client.disconnect()
+
+    def receive_response(self):  # noqa: ANN201
+        return self._client.receive_response()
 
 
 class SDKManager:
-    def __init__(self) -> None:
-        self._clients: dict[str, ClaudeSDKClient] = {}
+    """Concrete SDKClientFactory — creates and caches ClaudeSDKClient instances."""
 
-    async def create_client(
+    def __init__(self) -> None:
+        self._clients: dict[str, ClaudeSDKClientAdapter] = {}
+
+    async def create(
         self,
         session_id: str,
         resume: bool = False,
-    ) -> ClaudeSDKClient:
-        """Create and connect a new ClaudeSDKClient."""
+    ) -> SDKClient:
         if session_id in self._clients:
             return self._clients[session_id]
 
@@ -36,21 +63,17 @@ class SDKManager:
             options.session_id = session_id
 
         client = ClaudeSDKClient(options=options)
-        self._clients[session_id] = client
-        return client
+        adapter = ClaudeSDKClientAdapter(client)
+        self._clients[session_id] = adapter
+        return adapter
 
-    async def remove_client(self, session_id: str) -> None:
-        """Disconnect and remove a client."""
-        client = self._clients.pop(session_id, None)
-        if client:
+    async def remove(self, session_id: str) -> None:
+        adapter = self._clients.pop(session_id, None)
+        if adapter:
             try:
-                await client.disconnect()
+                await adapter.disconnect()
             except Exception:
                 pass
 
-    def has_client(self, session_id: str) -> bool:
+    def has(self, session_id: str) -> bool:
         return session_id in self._clients
-
-
-# Singleton
-sdk_manager = SDKManager()

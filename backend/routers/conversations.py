@@ -1,12 +1,15 @@
+"""REST endpoints for conversations — thin adapter over repositories."""
+
 from __future__ import annotations
 
-import json
 from typing import Any
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from .. import db
+from ..models import Conversation, Message
+from ..ports import ConversationRepository, MessageRepository
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -19,66 +22,102 @@ class UpdateConversationRequest(BaseModel):
     title: str
 
 
-def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
-    """Convert UUID and datetime fields to JSON-safe types."""
-    out: dict[str, Any] = {}
-    for k, v in row.items():
-        if hasattr(v, "hex"):  # UUID
-            out[k] = str(v)
-        elif hasattr(v, "isoformat"):  # datetime
-            out[k] = v.isoformat()
-        elif isinstance(v, str):
-            # asyncpg returns JSONB as string; parse it
-            if k == "content":
-                try:
-                    out[k] = json.loads(v)
-                except (json.JSONDecodeError, TypeError):
-                    out[k] = v
-            else:
-                out[k] = v
-        else:
-            out[k] = v
-    return out
+# ---------------------------------------------------------------------------
+# Serialization (domain model → JSON-safe dict)
+# ---------------------------------------------------------------------------
+
+
+def _serialize_conversation(conv: Conversation) -> dict[str, Any]:
+    return {
+        "id": str(conv.id),
+        "user_id": str(conv.user_id),
+        "title": conv.title,
+        "sdk_session_id": conv.sdk_session_id,
+        "created_at": conv.created_at.isoformat(),
+        "updated_at": conv.updated_at.isoformat(),
+    }
+
+
+def _serialize_message(msg: Message) -> dict[str, Any]:
+    return {
+        "id": str(msg.id),
+        "conversation_id": str(msg.conversation_id),
+        "role": msg.role,
+        "content": msg.content,
+        "created_at": msg.created_at.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Dependency helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_conversations(request: Request) -> ConversationRepository:
+    return request.app.state.conversations
+
+
+def _get_messages(request: Request) -> MessageRepository:
+    return request.app.state.messages
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.get("")
-async def list_conversations(limit: int = 50, offset: int = 0) -> dict[str, Any]:
-    rows = await db.list_conversations(limit=limit, offset=offset)
-    return {"conversations": [_serialize_row(r) for r in rows]}
+async def list_conversations(
+    request: Request, limit: int = 50, offset: int = 0,
+) -> dict[str, Any]:
+    repo = _get_conversations(request)
+    convs = await repo.list(limit=limit, offset=offset)
+    return {"conversations": [_serialize_conversation(c) for c in convs]}
 
 
 @router.post("")
-async def create_conversation(req: CreateConversationRequest) -> dict[str, Any]:
-    row = await db.create_conversation(title=req.title)
-    return _serialize_row(row)
+async def create_conversation(
+    request: Request, req: CreateConversationRequest,
+) -> dict[str, Any]:
+    repo = _get_conversations(request)
+    conv = await repo.create(title=req.title)
+    return _serialize_conversation(conv)
 
 
 @router.get("/{conversation_id}/messages")
 async def get_messages(
-    conversation_id: str, limit: int = 200, offset: int = 0
+    request: Request, conversation_id: str, limit: int = 200, offset: int = 0,
 ) -> dict[str, Any]:
-    conv = await db.get_conversation(conversation_id)
+    conv_repo = _get_conversations(request)
+    msg_repo = _get_messages(request)
+
+    conv = await conv_repo.get(UUID(conversation_id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    rows = await db.get_messages(conversation_id, limit=limit, offset=offset)
-    return {"messages": [_serialize_row(r) for r in rows]}
+
+    msgs = await msg_repo.list(UUID(conversation_id), limit=limit, offset=offset)
+    return {"messages": [_serialize_message(m) for m in msgs]}
 
 
 @router.patch("/{conversation_id}")
 async def update_conversation(
-    conversation_id: str, req: UpdateConversationRequest
+    request: Request, conversation_id: str, req: UpdateConversationRequest,
 ) -> dict[str, str]:
-    conv = await db.get_conversation(conversation_id)
+    repo = _get_conversations(request)
+    conv = await repo.get(UUID(conversation_id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    await db.update_conversation(conversation_id, title=req.title)
+    await repo.update(UUID(conversation_id), title=req.title)
     return {"status": "ok"}
 
 
 @router.delete("/{conversation_id}")
-async def delete_conversation(conversation_id: str) -> dict[str, str]:
-    conv = await db.get_conversation(conversation_id)
+async def delete_conversation(
+    request: Request, conversation_id: str,
+) -> dict[str, str]:
+    repo = _get_conversations(request)
+    conv = await repo.get(UUID(conversation_id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    await db.delete_conversation(conversation_id)
+    await repo.delete(UUID(conversation_id))
     return {"status": "ok"}
