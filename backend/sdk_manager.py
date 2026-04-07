@@ -21,7 +21,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from .config import AGENT_CWD
+from .config import AGENT_CWD, ANTHROPIC_MODEL
 from .models import (
     ModelInfoEvent,
     ResultEvent,
@@ -130,6 +130,7 @@ class SDKManager:
             allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Write", "Skill"],
             permission_mode="acceptEdits",
             cwd=AGENT_CWD,
+            model=ANTHROPIC_MODEL or None,
             setting_sources=["user", "project"],
             sandbox={
                 "enabled": True,
