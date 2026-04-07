@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from backend.routers.auth import find_or_create_user
-from tests.fakes import FakeUserRepository
+from backend.tests.fakes import FakeUserRepository
 
 
 class TestFindOrCreateUser:
