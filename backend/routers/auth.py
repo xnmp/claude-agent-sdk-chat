@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from ..models import User
-from ..ports import UserRepository
+from ..ports import AppState, UserRepository
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -44,8 +44,8 @@ async def find_or_create_user(
 
 @router.post("/login", response_model=UserResponse)
 async def login(request: Request, req: LoginRequest) -> UserResponse:
-    repo: UserRepository = request.app.state.users
-    user = await find_or_create_user(repo, req.email, req.display_name)
+    deps: AppState = request.app.state.deps
+    user = await find_or_create_user(deps.users, req.email, req.display_name)
     return UserResponse(
         id=str(user.id),
         email=user.email,

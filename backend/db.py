@@ -9,7 +9,7 @@ from typing import Any
 import asyncpg
 
 from .config import DATABASE_URL
-from .models import ANONYMOUS_USER_ID, Conversation, Message, User
+from .models import ANONYMOUS_USER_ID, Conversation, Message, MessageContent, MessageRole, User
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ def _row_to_message(row: asyncpg.Record) -> Message:
     return Message(
         id=row["id"],
         conversation_id=row["conversation_id"],
-        role=row["role"],
+        role=MessageRole(row["role"]),
         content=content,
         created_at=row["created_at"],
     )
@@ -200,8 +200,8 @@ class PgMessageRepository:
     async def save(
         self,
         conversation_id: uuid.UUID,
-        role: str,
-        content: dict[str, Any],
+        role: MessageRole,
+        content: MessageContent,
     ) -> Message:
         row = await self._pool.fetchrow(
             """
@@ -210,7 +210,7 @@ class PgMessageRepository:
             RETURNING id, conversation_id, role, content, created_at
             """,
             conversation_id,
-            role,
+            role.value,
             json.dumps(content),
         )
         # Also bump conversation.updated_at

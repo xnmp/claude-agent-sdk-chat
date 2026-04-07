@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import logging
 import traceback
-from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..chat import ChatSession, ConversationNotFoundError
+from ..models import ErrorWS, WSEvent
+from ..ports import AppState
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-async def _send_json(ws: WebSocket, data: dict[str, Any]) -> None:
+async def _send_json(ws: WebSocket, data: WSEvent) -> None:
     try:
         await ws.send_json(data)
     except Exception:
@@ -27,19 +28,18 @@ async def _send_json(ws: WebSocket, data: dict[str, Any]) -> None:
 async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None:
     await websocket.accept()
 
-    # Pull injected dependencies from app state
-    app = websocket.app
+    deps: AppState = websocket.app.state.deps
     session = ChatSession(
         conversation_id=UUID(conversation_id),
-        conversations=app.state.conversations,
-        messages=app.state.messages,
-        sdk_factory=app.state.sdk_factory,
+        conversations=deps.conversations,
+        messages=deps.messages,
+        sdk_factory=deps.sdk_factory,
     )
 
     try:
         await session.initialize()
     except ConversationNotFoundError:
-        await _send_json(websocket, {"type": "error", "message": "Conversation not found"})
+        await _send_json(websocket, ErrorWS(type="error", message="Conversation not found"))
         await websocket.close()
         return
 
@@ -58,7 +58,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
                         await _send_json(websocket, ws_msg)
                 except Exception as e:
                     logger.error("SDK stream error: %s", traceback.format_exc())
-                    await _send_json(websocket, {"type": "error", "message": str(e)})
+                    await _send_json(websocket, ErrorWS(type="error", message=str(e)))
 
             elif msg_type == "interrupt":
                 await session.handle_interrupt()

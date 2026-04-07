@@ -14,6 +14,7 @@ from .db import (
     close_pool,
     init_pool,
 )
+from .ports import AppState
 from .routers import auth, conversations, ws
 from .sdk_manager import SDKManager
 
@@ -22,11 +23,12 @@ from .sdk_manager import SDKManager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await init_pool()
 
-    # Wire concrete implementations onto app.state
-    app.state.users = PgUserRepository(pool)
-    app.state.conversations = PgConversationRepository(pool)
-    app.state.messages = PgMessageRepository(pool)
-    app.state.sdk_factory = SDKManager()
+    app.state.deps = AppState(
+        users=PgUserRepository(pool),
+        conversations=PgConversationRepository(pool),
+        messages=PgMessageRepository(pool),
+        sdk_factory=SDKManager(),
+    )
 
     yield
     await close_pool()

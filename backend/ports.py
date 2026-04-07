@@ -7,10 +7,19 @@ Domain logic (chat.py, routers) depends only on these protocols.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import UUID
 
-from .models import ANONYMOUS_USER_ID, Conversation, Message, User
+from .models import (
+    ANONYMOUS_USER_ID,
+    Conversation,
+    Message,
+    MessageContent,
+    MessageRole,
+    SDKEvent,
+    User,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +55,7 @@ class ConversationRepository(Protocol):
 
 class MessageRepository(Protocol):
     async def save(
-        self, conversation_id: UUID, role: str, content: dict[str, Any],
+        self, conversation_id: UUID, role: MessageRole, content: MessageContent,
     ) -> Message: ...
 
     async def list(
@@ -66,7 +75,7 @@ class SDKClient(Protocol):
     async def query(self, content: str) -> None: ...
     async def interrupt(self) -> None: ...
     async def disconnect(self) -> None: ...
-    def receive_response(self) -> AsyncIterator[Any]: ...
+    def receive_response(self) -> AsyncIterator[SDKEvent]: ...
 
 
 class SDKClientFactory(Protocol):
@@ -75,3 +84,16 @@ class SDKClientFactory(Protocol):
     async def create(self, session_id: str, resume: bool = False) -> SDKClient: ...
     async def remove(self, session_id: str) -> None: ...
     def has(self, session_id: str) -> bool: ...
+
+
+# ---------------------------------------------------------------------------
+# Typed application state (dependency container)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AppState:
+    users: UserRepository
+    conversations: ConversationRepository
+    messages: MessageRepository
+    sdk_factory: SDKClientFactory

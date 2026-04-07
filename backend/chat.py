@@ -1,7 +1,7 @@
 """Chat orchestration — domain logic with no infrastructure dependencies.
 
-Depends only on port interfaces (ConversationRepository, MessageRepository,
-SDKClientFactory) and the message translator (pure functions).
+Depends only on port interfaces, domain models, and the message translator.
+Does NOT import from claude_agent_sdk.
 """
 
 from __future__ import annotations
@@ -9,16 +9,15 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any
 from uuid import UUID
 
-from claude_agent_sdk import AssistantMessage, ResultMessage, UserMessage
-
-from .message_translator import (
-    TurnAccumulator,
-    translate_assistant_message,
-    translate_result_message,
-    translate_user_message,
+from .message_translator import translate_event
+from .models import (
+    AssistantTurn,
+    MessageRole,
+    ResultEvent,
+    UserMessageContent,
+    WSEvent,
 )
 from .ports import ConversationRepository, MessageRepository, SDKClient, SDKClientFactory
 
@@ -29,8 +28,7 @@ class ChatSession:
     """Manages a single chat session's interaction with the SDK.
 
     Holds the SDK client reference across messages within one WebSocket
-    connection. The orchestration methods are pure domain logic — they
-    read/write through injected repository and SDK interfaces.
+    connection. All dependencies are injected via constructor.
     """
 
     def __init__(
@@ -54,54 +52,36 @@ class ChatSession:
             raise ConversationNotFoundError(self.conversation_id)
         self._sdk_session_id = conv.sdk_session_id
 
-    async def handle_user_message(self, content: str) -> AsyncIterator[dict[str, Any]]:
-        """Process a user message and yield WebSocket events.
-
-        Saves the user message, lazily creates the SDK client,
-        streams the assistant response, and persists the result.
-        """
+    async def handle_user_message(self, content: str) -> AsyncIterator[WSEvent]:
+        """Process a user message and yield WebSocket events."""
         # Persist user message
         await self._messages.save(
             conversation_id=self.conversation_id,
-            role="user",
-            content={"text": content},
+            role=MessageRole.USER,
+            content=UserMessageContent(text=content),
         )
 
         # Lazily create SDK client
         if self._client is None:
             self._client = await self._ensure_sdk_client()
 
-        # Query the agent
+        # Query the agent and stream response
         await self._client.query(content)
 
-        # Stream and yield response events
-        accumulator = TurnAccumulator()
-        async for msg in self._client.receive_response():
-            if isinstance(msg, AssistantMessage):
-                for ws_msg in translate_assistant_message(msg, accumulator):
-                    yield ws_msg
+        turn = AssistantTurn()
+        async for event in self._client.receive_response():
+            turn.process(event)
 
-            elif isinstance(msg, UserMessage):
-                for ws_msg in translate_user_message(msg):
-                    yield ws_msg
-                    if ws_msg["type"] == "tool_result":
-                        _backfill_tool_result(accumulator, ws_msg)
+            for ws_event in translate_event(event):
+                yield ws_event
 
-            elif isinstance(msg, ResultMessage):
-                accumulator.duration_ms = msg.duration_ms
-                accumulator.total_cost_usd = msg.total_cost_usd or 0.0
-
-                # Persist the complete assistant turn
+            if isinstance(event, ResultEvent):
                 await self._messages.save(
                     conversation_id=self.conversation_id,
-                    role="assistant",
-                    content=accumulator.to_content(),
+                    role=MessageRole.ASSISTANT,
+                    content=turn.to_content(),
                 )
-
-                # Auto-title from first user message
                 await self._auto_title(content)
-
-                yield translate_result_message(msg)
 
     async def handle_interrupt(self) -> None:
         if self._client:
@@ -134,15 +114,6 @@ class ChatSession:
             await self._conversations.update(
                 self.conversation_id, title=first_content[:80],
             )
-
-
-def _backfill_tool_result(accumulator: TurnAccumulator, ws_msg: dict[str, Any]) -> None:
-    """Update the accumulator's tool_calls with a tool result."""
-    for tc in accumulator.tool_calls:
-        if tc["id"] == ws_msg["tool_use_id"]:
-            tc["result"] = ws_msg["content"]
-            tc["is_error"] = ws_msg["is_error"]
-            break
 
 
 class ConversationNotFoundError(Exception):
