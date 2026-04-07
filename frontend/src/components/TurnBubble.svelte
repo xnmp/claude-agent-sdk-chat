@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Message, UserContent, AssistantContent, LiveTurn } from '$lib/types';
+	import { renderMarkdown } from '$lib/markdown';
 	import ThinkingBlock from './ThinkingBlock.svelte';
 	import ToolCall from './ToolCall.svelte';
 
@@ -66,7 +67,7 @@
 			{/if}
 
 			{#if liveTurn.text}
-				<div class="response-text">{liveTurn.text}</div>
+				<div class="response-text markdown">{@html renderMarkdown(liveTurn.text)}</div>
 			{:else}
 				<div class="streaming-indicator">
 					<span class="dot"></span>
@@ -98,7 +99,7 @@
 			{/if}
 
 			{#if assistantContent.text}
-				<div class="response-text">{assistantContent.text}</div>
+				<div class="response-text markdown">{@html renderMarkdown(assistantContent.text)}</div>
 			{/if}
 
 			{#if assistantContent.total_cost_usd > 0}
@@ -150,8 +151,97 @@
 	}
 
 	.response-text {
-		white-space: pre-wrap;
 		word-break: break-word;
+	}
+
+	/* Markdown typography */
+	.response-text.markdown :global(p) {
+		margin: 0 0 0.6em;
+	}
+
+	.response-text.markdown :global(p:last-child) {
+		margin-bottom: 0;
+	}
+
+	.response-text.markdown :global(h1),
+	.response-text.markdown :global(h2),
+	.response-text.markdown :global(h3),
+	.response-text.markdown :global(h4) {
+		margin: 0.8em 0 0.4em;
+		font-weight: 600;
+		line-height: 1.3;
+	}
+
+	.response-text.markdown :global(h1) { font-size: 1.3em; }
+	.response-text.markdown :global(h2) { font-size: 1.15em; }
+	.response-text.markdown :global(h3) { font-size: 1.05em; }
+
+	.response-text.markdown :global(ul),
+	.response-text.markdown :global(ol) {
+		margin: 0.4em 0;
+		padding-left: 1.5em;
+	}
+
+	.response-text.markdown :global(li) {
+		margin: 0.2em 0;
+	}
+
+	.response-text.markdown :global(code) {
+		font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+		font-size: 0.875em;
+		background: var(--bg-inset, rgba(0, 0, 0, 0.06));
+		padding: 0.15em 0.35em;
+		border-radius: 4px;
+	}
+
+	.response-text.markdown :global(pre) {
+		margin: 0.6em 0;
+		padding: 0.8em 1em;
+		background: var(--bg-inset, rgba(0, 0, 0, 0.06));
+		border-radius: var(--radius-sm, 6px);
+		overflow-x: auto;
+	}
+
+	.response-text.markdown :global(pre code) {
+		background: none;
+		padding: 0;
+		font-size: 0.85em;
+	}
+
+	.response-text.markdown :global(blockquote) {
+		margin: 0.5em 0;
+		padding: 0.3em 0.8em;
+		border-left: 3px solid var(--accent, #6366f1);
+		color: var(--text-dim, #666);
+	}
+
+	.response-text.markdown :global(a) {
+		color: var(--accent, #6366f1);
+		text-decoration: underline;
+	}
+
+	.response-text.markdown :global(table) {
+		border-collapse: collapse;
+		margin: 0.5em 0;
+		width: 100%;
+	}
+
+	.response-text.markdown :global(th),
+	.response-text.markdown :global(td) {
+		border: 1px solid var(--border, #e2e8f0);
+		padding: 0.4em 0.7em;
+		text-align: left;
+	}
+
+	.response-text.markdown :global(th) {
+		font-weight: 600;
+		background: var(--bg-inset, rgba(0, 0, 0, 0.03));
+	}
+
+	.response-text.markdown :global(hr) {
+		border: none;
+		border-top: 1px solid var(--border, #e2e8f0);
+		margin: 0.8em 0;
 	}
 
 	/* Tool call toggle */
