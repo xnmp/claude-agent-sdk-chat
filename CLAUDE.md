@@ -102,3 +102,19 @@ cd frontend && bunx playwright test
 ### Database
 
 PostgreSQL on port 5433 (Docker). Schema in `schema.sql`. Auth-ready with `user_id` on conversations (defaults to anonymous UUID). Messages store content as JSONB — user messages as `{text}`, assistant messages as `{thinking[], tool_calls[], text, model, usage, duration_ms, total_cost_usd}`.
+
+### Workflow
+- All development happens on the `dev` branch. Create feature branches off `dev` and merge back to `dev`. Don't modify files directly on `dev`.
+- Always use a merge commit when merging
+- Convention: branch names map to issues by title. Branch `feat/my-feature` matches an issue whose title contains "my-feature". A hook validates that a matching open issue exists before allowing branch creation.
+- When creating issues, include a `## Screenshots` section in the issue body with markdown checkboxes (e.g., `- [ ] sidebar`). Screenshots must be saved to `screenshots/<branch>/`. The merge hook verifies they exist. Use 'None required' only for pure backend/refactor changes with no user-visible effect. Behavioral fixes still need a screenshot showing the corrected behavior.
+
+#### Per-Issue Checklist
+
+1. Create a GitHub issue (with `## Screenshots` section in the body)
+2. Create a branch (hook validates a matching open issue exists)
+3. Implement
+4. Run unit tests and fix failures
+5. If the issue requires screenshots, take them with the `agent-browser` CLI. It is **very important** that you read them to verify they capture working functionality
+6. If necessary, create tests. This will include a regression test for fixes, and a E2E test for new features.  
+7. Merge to `dev` with a descriptive merge commit (hooks run E2E tests; fix any regressions)
