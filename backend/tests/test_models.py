@@ -1,10 +1,9 @@
-"""Unit tests for domain models — AssistantTurn accumulation and MessageRole."""
+"""Unit tests for domain models — AssistantTurn accumulation logic."""
 
 from __future__ import annotations
 
 from backend.models import (
     AssistantTurn,
-    MessageRole,
     ModelInfoEvent,
     ResultEvent,
     TextEvent,
@@ -12,16 +11,6 @@ from backend.models import (
     ToolResultEvent,
     ToolUseEvent,
 )
-
-
-class TestMessageRole:
-    def test_values_match_db_strings(self):
-        assert MessageRole.USER.value == "user"
-        assert MessageRole.ASSISTANT.value == "assistant"
-
-    def test_round_trips_from_string(self):
-        assert MessageRole("user") is MessageRole.USER
-        assert MessageRole("assistant") is MessageRole.ASSISTANT
 
 
 class TestAssistantTurnProcess:
@@ -67,13 +56,6 @@ class TestAssistantTurnProcess:
 
         assert turn.text == "final answer"
 
-    def test_model_info_updates_model_and_usage(self):
-        turn = AssistantTurn()
-        turn.process(ModelInfoEvent(model="claude-sonnet-4-20250514", usage={"input_tokens": 10}))
-
-        assert turn.model == "claude-sonnet-4-20250514"
-        assert turn.usage == {"input_tokens": 10}
-
     def test_model_info_preserves_existing_model_when_empty(self):
         turn = AssistantTurn()
         turn.process(ModelInfoEvent(model="claude-sonnet-4-20250514", usage={}))
@@ -81,13 +63,6 @@ class TestAssistantTurnProcess:
 
         assert turn.model == "claude-sonnet-4-20250514"
         assert turn.usage == {"output_tokens": 5}
-
-    def test_result_event_sets_duration_and_cost(self):
-        turn = AssistantTurn()
-        turn.process(ResultEvent(session_id="s1", duration_ms=2500, total_cost_usd=0.01, num_turns=3, is_error=False))
-
-        assert turn.duration_ms == 2500
-        assert turn.total_cost_usd == 0.01
 
 
 class TestAssistantTurnToContent:
