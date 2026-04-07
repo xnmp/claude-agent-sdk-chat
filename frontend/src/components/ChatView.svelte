@@ -25,7 +25,6 @@
 
 	// Auto-scroll is a genuine DOM side effect — $effect is appropriate here
 	$effect(() => {
-		// Track reactive dependencies
 		void messages.length;
 		void liveTurn?.text;
 		void liveTurn?.tool_calls.length;
@@ -43,18 +42,28 @@
 <main class="chat-view">
 	{#if noConversation}
 		<div class="empty-state">
-			<h2>Claude Agent Chat</h2>
-			<p>Create or select a conversation to get started.</p>
+			<div class="empty-icon">
+				<svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M8 12C8 9.79 9.79 8 12 8H36C38.21 8 40 9.79 40 12V30C40 32.21 38.21 34 36 34H26L18 40V34H12C9.79 34 8 32.21 8 30V12Z" />
+					<circle cx="18" cy="21" r="1.5" fill="currentColor" stroke="none" />
+					<circle cx="24" cy="21" r="1.5" fill="currentColor" stroke="none" />
+					<circle cx="30" cy="21" r="1.5" fill="currentColor" stroke="none" />
+				</svg>
+			</div>
+			<h2>Start a conversation</h2>
+			<p>Create or select a conversation from the sidebar.</p>
 		</div>
 	{:else}
 		<div class="messages" bind:this={scrollContainer}>
-			{#each messages as msg (msg.id)}
-				<TurnBubble message={msg} />
-			{/each}
+			<div class="messages-inner">
+				{#each messages as msg (msg.id)}
+					<TurnBubble message={msg} />
+				{/each}
 
-			{#if liveTurn}
-				<TurnBubble {liveTurn} isLive={true} />
-			{/if}
+				{#if liveTurn}
+					<TurnBubble {liveTurn} isLive={true} />
+				{/if}
+			</div>
 		</div>
 
 		<MessageInput
@@ -73,15 +82,22 @@
 		flex-direction: column;
 		overflow: hidden;
 		min-width: 0;
+		background: var(--bg);
 	}
 
 	.messages {
 		flex: 1;
 		overflow-y: auto;
-		padding: 24px;
+		padding: 24px 0;
+	}
+
+	.messages-inner {
+		max-width: 768px;
+		margin: 0 auto;
+		padding: 0 24px;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 2px;
 	}
 
 	.empty-state {
@@ -90,16 +106,25 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
+		gap: 12px;
+	}
+
+	.empty-icon {
 		color: var(--text-dim);
+		margin-bottom: 4px;
 	}
 
 	.empty-state h2 {
-		font-size: 1.25rem;
-		color: var(--text-muted);
+		font-family: var(--font-display);
+		font-size: 1.5rem;
+		font-weight: 400;
+		font-style: italic;
+		color: var(--text);
+		letter-spacing: -0.02em;
 	}
 
 	.empty-state p {
 		font-size: 0.9375rem;
+		color: var(--text-muted);
 	}
 </style>

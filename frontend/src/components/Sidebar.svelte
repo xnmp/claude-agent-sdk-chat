@@ -36,8 +36,14 @@
 
 <aside class="sidebar">
 	<div class="sidebar-header">
-		<h2>Chats</h2>
-		<button class="new-btn" onclick={onNew}>+ New</button>
+		<h2>Conversations</h2>
+		<button class="new-btn" onclick={onNew}>
+			<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+				<line x1="7" y1="2" x2="7" y2="12" />
+				<line x1="2" y1="7" x2="12" y2="7" />
+			</svg>
+			New
+		</button>
 	</div>
 	<div class="conversation-list">
 		{#each conversations as conv (conv.id)}
@@ -57,8 +63,12 @@
 						e.stopPropagation();
 						onDelete(conv.id);
 					}}
+					aria-label="Delete conversation"
 				>
-					&times;
+					<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+						<line x1="2" y1="2" x2="10" y2="10" />
+						<line x1="10" y1="2" x2="2" y2="10" />
+					</svg>
 				</button>
 			</div>
 		{/each}
@@ -67,15 +77,18 @@
 		{/if}
 	</div>
 	<div class="sidebar-footer">
-		<span class="user-name">{user.display_name || user.email}</span>
+		<div class="user-info">
+			<div class="user-avatar">{(user.display_name || user.email).charAt(0).toUpperCase()}</div>
+			<span class="user-name">{user.display_name || user.email}</span>
+		</div>
 		<button class="logout-btn" onclick={onLogout}>Sign out</button>
 	</div>
 </aside>
 
 <style>
 	.sidebar {
-		width: 280px;
-		min-width: 280px;
+		width: 300px;
+		min-width: 300px;
 		background: var(--bg-surface);
 		border-right: 1px solid var(--border);
 		display: flex;
@@ -87,36 +100,43 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 16px;
-		border-bottom: 1px solid var(--border);
+		padding: 20px 20px 16px;
 	}
 
 	h2 {
-		font-size: 0.875rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--text-muted);
+		font-family: var(--font-display);
+		font-size: 1.125rem;
+		font-weight: 400;
+		font-style: italic;
+		color: var(--text);
+		letter-spacing: -0.01em;
 	}
 
 	.new-btn {
-		padding: 6px 12px;
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		padding: 7px 14px;
 		border-radius: var(--radius);
-		background: var(--accent);
-		color: white;
+		background: var(--text);
+		color: var(--bg-surface);
 		font-size: 0.8125rem;
-		font-weight: 500;
-		transition: background 0.15s;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+		transition: all 0.15s ease;
+		box-shadow: var(--shadow-sm);
 	}
 
 	.new-btn:hover {
-		background: var(--accent-dim);
+		background: var(--text-secondary);
+		box-shadow: var(--shadow-md);
+		transform: translateY(-0.5px);
 	}
 
 	.conversation-list {
 		flex: 1;
 		overflow-y: auto;
-		padding: 8px;
+		padding: 4px 12px;
 	}
 
 	.conversation-item {
@@ -127,8 +147,9 @@
 		padding: 10px 12px;
 		border-radius: var(--radius);
 		text-align: left;
-		transition: background 0.1s;
+		transition: all 0.12s ease;
 		position: relative;
+		border: 1px solid transparent;
 	}
 
 	.conversation-item:hover {
@@ -137,35 +158,45 @@
 
 	.conversation-item.active {
 		background: var(--bg-active);
+		border-color: var(--border);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.conv-title {
 		flex: 1;
 		font-size: 0.875rem;
+		font-weight: 500;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		color: var(--text);
+	}
+
+	.conversation-item.active .conv-title {
+		color: var(--text);
 	}
 
 	.conv-time {
-		font-size: 0.75rem;
+		font-size: 0.6875rem;
 		color: var(--text-dim);
 		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.delete-btn {
 		opacity: 0;
-		font-size: 1.1rem;
 		color: var(--text-dim);
-		padding: 2px 4px;
-		border-radius: 4px;
-		transition:
-			opacity 0.1s,
-			color 0.1s;
+		padding: 4px;
+		border-radius: var(--radius-sm);
+		transition: all 0.12s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.delete-btn:hover {
 		color: var(--error);
+		background: var(--error-bg);
 	}
 
 	.conversation-item:hover .delete-btn {
@@ -173,23 +204,45 @@
 	}
 
 	.empty {
-		padding: 16px;
+		padding: 24px 16px;
 		text-align: center;
 		color: var(--text-dim);
 		font-size: 0.875rem;
+		font-style: italic;
 	}
 
 	.sidebar-footer {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 12px 16px;
+		padding: 14px 20px;
 		border-top: 1px solid var(--border);
+	}
+
+	.user-info {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+
+	.user-avatar {
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		background: var(--accent-subtle);
+		color: var(--accent);
+		font-size: 0.75rem;
+		font-weight: 600;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
 	}
 
 	.user-name {
 		font-size: 0.8125rem;
-		color: var(--text-muted);
+		color: var(--text-secondary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -197,10 +250,11 @@
 
 	.logout-btn {
 		font-size: 0.75rem;
-		color: var(--text-dim);
-		padding: 4px 8px;
-		border-radius: var(--radius);
-		transition: color 0.15s, background 0.15s;
+		color: var(--text-muted);
+		padding: 5px 10px;
+		border-radius: var(--radius-sm);
+		transition: all 0.15s ease;
+		flex-shrink: 0;
 	}
 
 	.logout-btn:hover {

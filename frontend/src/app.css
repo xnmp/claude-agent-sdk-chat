@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
 *,
 *::before,
 *::after {
@@ -7,31 +9,68 @@
 }
 
 :root {
-	--bg: #0f0f0f;
-	--bg-surface: #1a1a1a;
-	--bg-hover: #242424;
-	--bg-active: #2a2a2a;
-	--border: #2e2e2e;
-	--text: #e4e4e4;
-	--text-muted: #888;
-	--text-dim: #666;
-	--accent: #7c6bf0;
-	--accent-dim: #5a4dc7;
-	--error: #e55;
-	--success: #5a5;
-	--thinking-bg: #1e1a2e;
-	--tool-bg: #1a1e1a;
-	--radius: 8px;
-	--font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+	/* Base palette — warm light */
+	--bg: #faf8f5;
+	--bg-surface: #ffffff;
+	--bg-hover: #f2efe9;
+	--bg-active: #eae6de;
+	--bg-inset: #f5f2ed;
+
+	/* Borders — soft warm */
+	--border: rgba(0, 0, 0, 0.08);
+	--border-strong: rgba(0, 0, 0, 0.14);
+
+	/* Text */
+	--text: #1a1715;
+	--text-secondary: #4a4540;
+	--text-muted: #8a8480;
+	--text-dim: #b0aaa4;
+
+	/* Accent — warm coral */
+	--accent: #d4654a;
+	--accent-hover: #c05840;
+	--accent-subtle: rgba(212, 101, 74, 0.08);
+	--accent-muted: rgba(212, 101, 74, 0.15);
+
+	/* Status */
+	--error: #c9413b;
+	--error-bg: rgba(201, 65, 59, 0.08);
+	--success: #2d8a4e;
+	--success-bg: rgba(45, 138, 78, 0.08);
+
+	/* Special surfaces */
+	--thinking-bg: #f8f5f0;
+	--thinking-border: rgba(180, 160, 130, 0.2);
+	--tool-bg: #f4f7f4;
+	--tool-border: rgba(45, 138, 78, 0.12);
+
+	/* Typography */
+	--font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+	--font-display: 'Newsreader', 'Georgia', serif;
+	--font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+
+	/* Spacing */
+	--radius: 10px;
+	--radius-sm: 6px;
+	--radius-lg: 14px;
+
+	/* Shadows */
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+	--shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+	--shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
+	--shadow-glow: 0 0 0 3px var(--accent-subtle), 0 2px 8px rgba(212, 101, 74, 0.1);
 }
 
 html,
 body {
 	height: 100%;
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	font-family: var(--font-body);
 	background: var(--bg);
 	color: var(--text);
-	line-height: 1.5;
+	line-height: 1.55;
+	font-size: 15px;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 button {
@@ -47,8 +86,36 @@ a {
 	text-decoration: none;
 }
 
+a:hover {
+	text-decoration: underline;
+}
+
 pre,
 code {
 	font-family: var(--font-mono);
-	font-size: 0.875rem;
+	font-size: 0.8125rem;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+	width: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--border-strong);
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-dim);
+}
+
+/* Selection */
+::selection {
+	background: var(--accent-muted);
+	color: var(--text);
 }
