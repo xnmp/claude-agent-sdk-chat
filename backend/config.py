@@ -17,6 +17,9 @@ AGENT_CWD = os.environ.get("AGENT_CWD", os.getcwd())
 # Read here so it's available as a config value; validated at startup.
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
+# Optional base URL override (e.g. for proxies or custom endpoints)
+ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
+
 _REQUIRED_VARS = {
     "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
 }
