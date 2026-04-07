@@ -1,0 +1,54 @@
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+:root {
+	--bg: #0f0f0f;
+	--bg-surface: #1a1a1a;
+	--bg-hover: #242424;
+	--bg-active: #2a2a2a;
+	--border: #2e2e2e;
+	--text: #e4e4e4;
+	--text-muted: #888;
+	--text-dim: #666;
+	--accent: #7c6bf0;
+	--accent-dim: #5a4dc7;
+	--error: #e55;
+	--success: #5a5;
+	--thinking-bg: #1e1a2e;
+	--tool-bg: #1a1e1a;
+	--radius: 8px;
+	--font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+html,
+body {
+	height: 100%;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	background: var(--bg);
+	color: var(--text);
+	line-height: 1.5;
+}
+
+button {
+	cursor: pointer;
+	border: none;
+	background: none;
+	color: inherit;
+	font: inherit;
+}
+
+a {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+pre,
+code {
+	font-family: var(--font-mono);
+	font-size: 0.875rem;
+}
