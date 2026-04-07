@@ -22,8 +22,12 @@ class SDKManager:
 
         options = ClaudeAgentOptions(
             allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Write"],
-            permission_mode="bypassPermissions",
+            permission_mode="acceptEdits",
             cwd=AGENT_CWD,
+            sandbox={
+                "enabled": True,
+                "autoAllowBashIfSandboxed": True,
+            },
         )
         if resume:
             options.resume = session_id
