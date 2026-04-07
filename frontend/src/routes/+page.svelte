@@ -2,10 +2,12 @@
 	import { onMount } from 'svelte';
 	import Sidebar from '../components/Sidebar.svelte';
 	import ChatView from '../components/ChatView.svelte';
-	import type { Conversation, Message, LiveTurn, WsMessage, AssistantContent } from '$lib/types';
+	import Login from '../components/Login.svelte';
+	import type { Conversation, Message, LiveTurn, WsMessage, AssistantContent, User } from '$lib/types';
 	import { listConversations, createConversation, getMessages, deleteConversation } from '$lib/api';
 	import { createWsClient, type WsClient, type WsStatus } from '$lib/ws';
 
+	let currentUser = $state<User | null>(null);
 	let conversations = $state<Conversation[]>([]);
 	let activeConversationId = $state<string | null>(null);
 	let messages = $state<Message[]>([]);
@@ -15,8 +17,27 @@
 	let wsStatus = $state<WsStatus>('disconnected');
 
 	onMount(() => {
-		loadConversations();
+		const stored = localStorage.getItem('user');
+		if (stored) {
+			currentUser = JSON.parse(stored);
+			loadConversations();
+		}
 	});
+
+	function handleLogin(user: User) {
+		currentUser = user;
+		loadConversations();
+	}
+
+	function handleLogout() {
+		localStorage.removeItem('user');
+		currentUser = null;
+		conversations = [];
+		activeConversationId = null;
+		messages = [];
+		wsClient?.disconnect();
+		wsClient = null;
+	}
 
 	async function loadConversations() {
 		conversations = await listConversations();
@@ -156,19 +177,25 @@
 	}
 </script>
 
-<Sidebar
-	{conversations}
-	{activeConversationId}
-	onSelect={selectConversation}
-	onNew={handleNewChat}
-	onDelete={handleDeleteConversation}
-/>
+{#if currentUser}
+	<Sidebar
+		{conversations}
+		{activeConversationId}
+		onSelect={selectConversation}
+		onNew={handleNewChat}
+		onDelete={handleDeleteConversation}
+		user={currentUser}
+		onLogout={handleLogout}
+	/>
 
-<ChatView
-	{messages}
-	{liveTurn}
-	{isStreaming}
-	{wsStatus}
-	onSend={handleSendMessage}
-	onInterrupt={handleInterrupt}
-/>
+	<ChatView
+		{messages}
+		{liveTurn}
+		{isStreaming}
+		{wsStatus}
+		onSend={handleSendMessage}
+		onInterrupt={handleInterrupt}
+	/>
+{:else}
+	<Login onLogin={handleLogin} />
+{/if}
