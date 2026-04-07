@@ -10,7 +10,7 @@ from backend.models import (
     ResultEvent,
     TextEvent,
 )
-from tests.fakes import (
+from backend.tests.fakes import (
     FakeConversationRepository,
     FakeMessageRepository,
     FakeSDKClient,

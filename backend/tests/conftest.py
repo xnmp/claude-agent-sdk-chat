@@ -12,7 +12,7 @@ from backend.models import (
     ToolResultEvent,
     ToolUseEvent,
 )
-from tests.fakes import (
+from backend.tests.fakes import (
     FakeConversationRepository,
     FakeMessageRepository,
     FakeSDKClient,
