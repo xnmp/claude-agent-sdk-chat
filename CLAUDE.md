@@ -45,16 +45,25 @@ Two-process app: FastAPI backend (:8000) + SvelteKit frontend (:5173).
 
 ### Backend (`backend/`)
 
-- `app.py`: FastAPI app, CORS, lifespan (asyncpg pool init/teardown)
-- `db.py`: Raw asyncpg queries — no ORM. Conversations and messages tables.
-- `sdk_manager.py`: Singleton managing `ClaudeSDKClient` instances keyed by `sdk_session_id`. One client per active WebSocket.
-- `message_translator.py`: Converts SDK types (`ThinkingBlock`, `ToolUseBlock`, `TextBlock`, etc.) into WebSocket JSON and DB-ready `TurnAccumulator` content.
-- `routers/ws.py`: WebSocket handler — bridges SDK streaming to frontend. Saves user messages immediately, accumulates assistant turns, persists on completion.
-- `routers/conversations.py`: REST CRUD for conversations/messages from Postgres.
+**Domain layer** (no SDK/framework imports):
+- `models.py`: Pure domain models (`User`, `Conversation`, `Message`), SDK domain events (`ThinkingEvent`, `ToolUseEvent`, etc.), WS protocol events, and `AssistantTurn` accumulator.
+- `ports.py`: Abstract `Protocol` interfaces (`UserRepository`, `ConversationRepository`, `MessageRepository`, `SDKClient`, `SDKClientFactory`) — domain depends on these, concrete implementations live in infrastructure.
+- `chat.py`: `ChatSession` orchestrator — manages SDK interaction, user message persistence, event streaming, and conversation auto-titling without importing the SDK directly.
+
+**Infrastructure layer**:
+- `app.py`: FastAPI app, CORS, lifespan (asyncpg pool init/teardown), dependency wiring.
+- `config.py`: Environment config (`DATABASE_URL`, CORS origins, `AGENT_CWD`).
+- `db.py`: Raw asyncpg queries — no ORM. Implements repository ports.
+- `sdk_manager.py`: Singleton managing `ClaudeSDKClient` instances keyed by `sdk_session_id`.
+- `message_translator.py`: Converts SDK types into domain events.
+- `serializers.py`: Domain model → JSON dict serialization for HTTP responses.
+- `routers/ws.py`: WebSocket handler — bridges SDK streaming to frontend.
+- `routers/conversations.py`: REST CRUD for conversations/messages.
 
 ### Frontend (`frontend/src/`)
 
-- `+page.svelte`: Orchestrates state — conversations, messages, WebSocket lifecycle, live turn accumulation.
+- `routes/+page.svelte`: Orchestrates state — conversations, messages, WebSocket lifecycle, live turn accumulation.
+- `components/`: `ChatView`, `Login`, `MessageInput`, `Sidebar`, `ThinkingBlock`, `ToolCall`, `TurnBubble`.
 - `lib/ws.ts`: WebSocket client factory. One connection per conversation.
 - `lib/api.ts`: REST client for conversation CRUD.
 - `lib/types.ts`: Shared TypeScript types for messages, WS protocol, content structures.
@@ -71,6 +80,24 @@ Assistant turns render at three levels of detail:
 Client → Server: `{type: "user_message", content}` or `{type: "interrupt"}`
 
 Server → Client: `thinking`, `tool_use`, `tool_input`, `tool_result`, `assistant_text`, `result`, `error`
+
+### Testing
+
+```bash
+# Backend tests (pytest)
+uv run pytest backend/tests/
+
+# Frontend unit tests (vitest)
+cd frontend && bun run test
+
+# Frontend e2e tests (Playwright)
+cd frontend && bunx playwright test
+```
+
+- **Backend tests** (`backend/tests/`): Unit tests for models, serializers, message translator, chat session, SDK adapter; integration tests for DB and WebSocket.
+- **Frontend unit tests** (`frontend/tests/`): Component tests for Login, MessageInput, Sidebar, ThinkingBlock, ToolCall, TurnBubble.
+- **Frontend e2e tests** (`frontend/e2e/`): Playwright specs for conversation flows.
+- Test fakes/stubs live in `backend/tests/fakes.py` — implement the ports interfaces for isolation.
 
 ### Database
 
