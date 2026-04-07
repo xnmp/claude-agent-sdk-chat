@@ -35,11 +35,15 @@ RUST_COUNT=$(echo "$ALL_CHANGES" | grep -cE 'src-tauri/src/.*\.rs$' || true)
 SRC_TOTAL=$((SRC_COUNT + RUST_COUNT))
 [ "$SRC_TOTAL" -eq 0 ] && exit 0
 
-# Only enforce on the first commit that includes source changes.
-# If prior commits on this branch already touched source files, the test
-# requirement was already enforced on that earlier commit — skip now.
-PRIOR_SRC=$(git diff --name-only dev...HEAD 2>/dev/null | grep -cE '(src/(lib|routes)/.*\.(ts|svelte)$|src-tauri/src/.*\.rs$)' || true)
-[ "$PRIOR_SRC" -gt 0 ] && exit 0
+# If the branch already includes test files (committed or staged), the
+# requirement is satisfied — skip enforcement.
+BRANCH_UNIT=$(echo "$ALL_CHANGES" | grep -cE 'tests/.*\.test\.ts$' || true)
+BRANCH_E2E=$(echo "$ALL_CHANGES" | grep -cE 'e2e/.*\.spec\.ts$' || true)
+BRANCH_BACKEND=$(echo "$ALL_CHANGES" | grep -cE 'backend/tests/test_.*\.py$' || true)
+
+if [ "$BRANCH_UNIT" -gt 0 ] || [ "$BRANCH_E2E" -gt 0 ] || [ "$BRANCH_BACKEND" -gt 0 ]; then
+  exit 0
+fi
 
 # Non-blocking reminder: consider unit tests
 if [ "$UNIT_COUNT" -eq 0 ]; then
