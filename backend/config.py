@@ -20,6 +20,10 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 # Optional base URL override (e.g. for proxies or custom endpoints)
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
 
+# Model to use for the agent. Passed as --model to the CLI.
+# Defaults to claude-sonnet-4-5-20250514 (the CLI default when omitted).
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "")
+
 _REQUIRED_VARS = {
     "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
 }
