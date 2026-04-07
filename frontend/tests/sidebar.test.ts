@@ -100,7 +100,7 @@ describe('Sidebar', () => {
 			}
 		});
 
-		await user.click(screen.getByText('+ New'));
+		await user.click(screen.getByText('New'));
 		expect(onNew).toHaveBeenCalledOnce();
 	});
 

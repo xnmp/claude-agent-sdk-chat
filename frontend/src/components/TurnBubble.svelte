@@ -17,12 +17,10 @@
 	let userContent = $derived(isUser ? (message?.content as UserContent) : null);
 	let assistantContent = $derived(!isUser && message ? (message.content as AssistantContent) : null);
 
-	// For live turns, derive sub-message visibility
 	let liveHasSubMessages = $derived(
 		liveTurn ? liveTurn.thinking.length > 0 || liveTurn.tool_calls.length > 0 : false
 	);
 
-	// For persisted assistant messages
 	let hasSubMessages = $derived(
 		assistantContent
 			? assistantContent.thinking.length > 0 || assistantContent.tool_calls.length > 0
@@ -30,21 +28,31 @@
 	);
 
 	let showSubMessages = $state(false);
+
+	let toolCallCount = $derived(
+		isLive && liveTurn
+			? liveTurn.tool_calls.length
+			: assistantContent
+				? assistantContent.tool_calls.length
+				: 0
+	);
 </script>
 
 {#if isUser && userContent}
-	<div class="turn user">
+	<div class="turn user-turn">
 		<div class="bubble user-bubble">
 			<p>{userContent.text}</p>
 		</div>
 	</div>
 {:else if isLive && liveTurn}
-	<div class="turn assistant">
+	<div class="turn assistant-turn">
 		<div class="bubble assistant-bubble">
 			{#if liveHasSubMessages}
 				<button class="toggle-sub" onclick={() => (showSubMessages = !showSubMessages)}>
-					{showSubMessages ? 'Hide' : 'Show'}
-					{liveTurn.tool_calls.length} tool call{liveTurn.tool_calls.length !== 1 ? 's' : ''}
+					<svg class="toggle-icon" class:open={showSubMessages} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+						<polyline points="4,2 8,6 4,10" />
+					</svg>
+					{toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
 				</button>
 
 				{#if showSubMessages}
@@ -69,14 +77,14 @@
 		</div>
 	</div>
 {:else if assistantContent}
-	<div class="turn assistant">
+	<div class="turn assistant-turn">
 		<div class="bubble assistant-bubble">
 			{#if hasSubMessages}
 				<button class="toggle-sub" onclick={() => (showSubMessages = !showSubMessages)}>
-					{showSubMessages ? 'Hide' : 'Show'}
-					{assistantContent.tool_calls.length} tool call{assistantContent.tool_calls.length !== 1
-						? 's'
-						: ''}
+					<svg class="toggle-icon" class:open={showSubMessages} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+						<polyline points="4,2 8,6 4,10" />
+					</svg>
+					{toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
 				</button>
 
 				{#if showSubMessages}
@@ -97,6 +105,7 @@
 				<div class="meta">
 					<span>${assistantContent.total_cost_usd.toFixed(4)}</span>
 					{#if assistantContent.duration_ms > 0}
+						<span class="meta-sep">&middot;</span>
 						<span>{(assistantContent.duration_ms / 1000).toFixed(1)}s</span>
 					{/if}
 				</div>
@@ -107,28 +116,24 @@
 
 <style>
 	.turn {
-		padding: 4px 0;
+		padding: 6px 0;
 	}
 
 	.bubble {
-		max-width: 85%;
-		padding: 12px 16px;
-		border-radius: var(--radius);
+		max-width: 88%;
+		padding: 14px 18px;
+		border-radius: var(--radius-lg);
 		line-height: 1.6;
 		font-size: 0.9375rem;
 	}
 
+	/* User messages */
 	.user-bubble {
-		background: var(--accent);
-		color: white;
+		background: var(--text);
+		color: var(--bg-surface);
 		margin-left: auto;
-		border-bottom-right-radius: 2px;
-	}
-
-	.assistant-bubble {
-		background: var(--bg-surface);
-		border: 1px solid var(--border);
-		border-bottom-left-radius: 2px;
+		border-bottom-right-radius: 4px;
+		box-shadow: var(--shadow-sm);
 	}
 
 	.user-bubble p {
@@ -136,50 +141,84 @@
 		word-break: break-word;
 	}
 
+	/* Assistant messages */
+	.assistant-bubble {
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-bottom-left-radius: 4px;
+		box-shadow: var(--shadow-sm);
+	}
+
 	.response-text {
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
 
+	/* Tool call toggle */
 	.toggle-sub {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
 		font-size: 0.8125rem;
+		font-weight: 500;
 		color: var(--accent);
-		padding: 4px 0;
-		margin-bottom: 4px;
+		padding: 4px 8px;
+		margin: -2px -8px 6px;
+		border-radius: var(--radius-sm);
+		transition: background 0.12s ease;
 	}
 
 	.toggle-sub:hover {
-		text-decoration: underline;
+		background: var(--accent-subtle);
+	}
+
+	.toggle-icon {
+		transition: transform 0.15s ease;
+	}
+
+	.toggle-icon.open {
+		transform: rotate(90deg);
 	}
 
 	.sub-messages {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		margin-bottom: 10px;
-		padding-bottom: 10px;
+		margin-bottom: 12px;
+		padding-bottom: 12px;
 		border-bottom: 1px solid var(--border);
 	}
 
+	/* Meta info */
 	.meta {
 		display: flex;
-		gap: 12px;
-		margin-top: 8px;
+		align-items: center;
+		gap: 6px;
+		margin-top: 10px;
+		padding-top: 10px;
+		border-top: 1px solid var(--border);
 		font-size: 0.75rem;
 		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
 	}
 
+	.meta-sep {
+		color: var(--border-strong);
+	}
+
+	/* Streaming indicator */
 	.streaming-indicator {
 		display: flex;
-		gap: 4px;
+		gap: 5px;
 		padding: 4px 0;
 	}
 
 	.dot {
-		width: 6px;
-		height: 6px;
+		width: 7px;
+		height: 7px;
 		border-radius: 50%;
-		background: var(--text-dim);
+		background: var(--accent);
+		opacity: 0.35;
 		animation: pulse 1.4s ease-in-out infinite;
 	}
 
@@ -195,10 +234,12 @@
 		0%,
 		80%,
 		100% {
-			opacity: 0.3;
+			opacity: 0.2;
+			transform: scale(0.85);
 		}
 		40% {
 			opacity: 1;
+			transform: scale(1);
 		}
 	}
 </style>
