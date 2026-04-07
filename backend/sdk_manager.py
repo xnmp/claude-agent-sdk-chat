@@ -21,9 +21,10 @@ class SDKManager:
             return self._clients[session_id]
 
         options = ClaudeAgentOptions(
-            allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Write"],
+            allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Write", "Skill"],
             permission_mode="acceptEdits",
             cwd=AGENT_CWD,
+            setting_sources=["user", "project"],
             sandbox={
                 "enabled": True,
                 "autoAllowBashIfSandboxed": True,
