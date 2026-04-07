@@ -3,19 +3,20 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Check if Postgres container is running
-if ! docker ps --format '{{.Names}}' | grep -q claude-chat-postgres; then
-    echo "Starting Postgres..."
-    docker run -d --name claude-chat-postgres \
-        -e POSTGRES_USER=claude_chat \
-        -e POSTGRES_PASSWORD=claude_chat \
-        -e POSTGRES_DB=claude_chat \
-        -p 5433:5432 \
-        postgres:17-alpine
-    sleep 2
-    echo "Running schema..."
-    docker exec -i claude-chat-postgres psql -U claude_chat -d claude_chat < "$ROOT/schema.sql"
-fi
+# Force remove the container if it exists (running or not)
+docker rm -f claude-chat-postgres 2>/dev/null || true
+
+echo "Starting Postgres..."
+docker run -d --name claude-chat-postgres \
+    -e POSTGRES_USER=claude_chat \
+    -e POSTGRES_PASSWORD=claude_chat \
+    -e POSTGRES_DB=claude_chat \
+    -p 5433:5432 \
+    postgres:17-alpine
+
+sleep 2
+echo "Running schema..."
+docker exec -i claude-chat-postgres psql -U claude_chat -d claude_chat < "$ROOT/schema.sql"
 
 # Start backend
 echo "Starting backend on :8000..."
