@@ -10,6 +10,7 @@ wheels/
 .venv
 uv.lock
 bun.lock
+.last-run.json
 
 # Frontend
 frontend/node_modules/

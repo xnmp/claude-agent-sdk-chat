@@ -1,0 +1,122 @@
+"""Chat orchestration — domain logic with no infrastructure dependencies.
+
+Depends only on port interfaces, domain models, and the message translator.
+Does NOT import from claude_agent_sdk.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from collections.abc import AsyncIterator
+from uuid import UUID
+
+from .message_translator import translate_event
+from .models import (
+    AssistantTurn,
+    MessageRole,
+    ResultEvent,
+    UserMessageContent,
+    WSEvent,
+)
+from .ports import ConversationRepository, MessageRepository, SDKClient, SDKClientFactory
+
+logger = logging.getLogger(__name__)
+
+
+class ChatSession:
+    """Manages a single chat session's interaction with the SDK.
+
+    Holds the SDK client reference across messages within one WebSocket
+    connection. All dependencies are injected via constructor.
+    """
+
+    def __init__(
+        self,
+        conversation_id: UUID,
+        conversations: ConversationRepository,
+        messages: MessageRepository,
+        sdk_factory: SDKClientFactory,
+    ) -> None:
+        self.conversation_id = conversation_id
+        self._conversations = conversations
+        self._messages = messages
+        self._sdk_factory = sdk_factory
+        self._client: SDKClient | None = None
+        self._sdk_session_id: str | None = None
+
+    async def initialize(self) -> None:
+        """Load conversation and set the SDK session ID. Call once before handling messages."""
+        conv = await self._conversations.get(self.conversation_id)
+        if conv is None:
+            raise ConversationNotFoundError(self.conversation_id)
+        self._sdk_session_id = conv.sdk_session_id
+
+    async def handle_user_message(self, content: str) -> AsyncIterator[WSEvent]:
+        """Process a user message and yield WebSocket events."""
+        # Persist user message
+        await self._messages.save(
+            conversation_id=self.conversation_id,
+            role=MessageRole.USER,
+            content=UserMessageContent(text=content),
+        )
+
+        # Lazily create SDK client
+        if self._client is None:
+            self._client = await self._ensure_sdk_client()
+
+        # Query the agent and stream response
+        await self._client.query(content)
+
+        turn = AssistantTurn()
+        async for event in self._client.receive_response():
+            turn.process(event)
+
+            for ws_event in translate_event(event):
+                yield ws_event
+
+            if isinstance(event, ResultEvent):
+                await self._messages.save(
+                    conversation_id=self.conversation_id,
+                    role=MessageRole.ASSISTANT,
+                    content=turn.to_content(),
+                )
+                await self._auto_title(content)
+
+    async def handle_interrupt(self) -> None:
+        if self._client:
+            try:
+                await self._client.interrupt()
+            except Exception:
+                pass
+
+    async def cleanup(self) -> None:
+        if self._sdk_session_id:
+            await self._sdk_factory.remove(self._sdk_session_id)
+
+    # -- private helpers -----------------------------------------------------
+
+    async def _ensure_sdk_client(self) -> SDKClient:
+        if self._sdk_session_id:
+            client = await self._sdk_factory.create(self._sdk_session_id, resume=True)
+        else:
+            self._sdk_session_id = str(uuid.uuid4())
+            await self._conversations.update(
+                self.conversation_id, sdk_session_id=self._sdk_session_id,
+            )
+            client = await self._sdk_factory.create(self._sdk_session_id, resume=False)
+        await client.connect()
+        return client
+
+    async def _auto_title(self, first_content: str) -> None:
+        conv = await self._conversations.get(self.conversation_id)
+        if conv and not conv.title:
+            await self._conversations.update(
+                self.conversation_id, title=first_content[:80],
+            )
+
+
+class ConversationNotFoundError(Exception):
+    def __init__(self, conversation_id: UUID) -> None:
+        super().__init__(f"Conversation {conversation_id} not found")
+        self.conversation_id = conversation_id

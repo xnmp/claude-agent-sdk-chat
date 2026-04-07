@@ -1,12 +1,15 @@
+"""REST endpoints for conversations — thin adapter over repositories."""
+
 from __future__ import annotations
 
-import json
 from typing import Any
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from .. import db
+from ..ports import AppState
+from ..serializers import serialize_conversation, serialize_message
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -19,66 +22,66 @@ class UpdateConversationRequest(BaseModel):
     title: str
 
 
-def _serialize_row(row: dict[str, Any]) -> dict[str, Any]:
-    """Convert UUID and datetime fields to JSON-safe types."""
-    out: dict[str, Any] = {}
-    for k, v in row.items():
-        if hasattr(v, "hex"):  # UUID
-            out[k] = str(v)
-        elif hasattr(v, "isoformat"):  # datetime
-            out[k] = v.isoformat()
-        elif isinstance(v, str):
-            # asyncpg returns JSONB as string; parse it
-            if k == "content":
-                try:
-                    out[k] = json.loads(v)
-                except (json.JSONDecodeError, TypeError):
-                    out[k] = v
-            else:
-                out[k] = v
-        else:
-            out[k] = v
-    return out
+def _deps(request: Request) -> AppState:
+    return request.app.state.deps
 
 
 @router.get("")
-async def list_conversations(limit: int = 50, offset: int = 0) -> dict[str, Any]:
-    rows = await db.list_conversations(limit=limit, offset=offset)
-    return {"conversations": [_serialize_row(r) for r in rows]}
+async def list_conversations(
+    request: Request, limit: int = 50, offset: int = 0,
+) -> dict[str, Any]:
+    deps = _deps(request)
+    convs = await deps.conversations.list(limit=limit, offset=offset)
+    return {"conversations": [serialize_conversation(c) for c in convs]}
 
 
 @router.post("")
-async def create_conversation(req: CreateConversationRequest) -> dict[str, Any]:
-    row = await db.create_conversation(title=req.title)
-    return _serialize_row(row)
+async def create_conversation(
+    request: Request, req: CreateConversationRequest,
+) -> dict[str, Any]:
+    deps = _deps(request)
+    conv = await deps.conversations.create(title=req.title)
+    return serialize_conversation(conv)
 
 
 @router.get("/{conversation_id}/messages")
 async def get_messages(
-    conversation_id: str, limit: int = 200, offset: int = 0
+    request: Request, conversation_id: str, limit: int = 200, offset: int = 0,
 ) -> dict[str, Any]:
-    conv = await db.get_conversation(conversation_id)
+    deps = _deps(request)
+    cid = UUID(conversation_id)
+
+    conv = await deps.conversations.get(cid)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    rows = await db.get_messages(conversation_id, limit=limit, offset=offset)
-    return {"messages": [_serialize_row(r) for r in rows]}
+
+    msgs = await deps.messages.list(cid, limit=limit, offset=offset)
+    return {"messages": [serialize_message(m) for m in msgs]}
 
 
 @router.patch("/{conversation_id}")
 async def update_conversation(
-    conversation_id: str, req: UpdateConversationRequest
+    request: Request, conversation_id: str, req: UpdateConversationRequest,
 ) -> dict[str, str]:
-    conv = await db.get_conversation(conversation_id)
+    deps = _deps(request)
+    cid = UUID(conversation_id)
+
+    conv = await deps.conversations.get(cid)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    await db.update_conversation(conversation_id, title=req.title)
+    await deps.conversations.update(cid, title=req.title)
     return {"status": "ok"}
 
 
 @router.delete("/{conversation_id}")
-async def delete_conversation(conversation_id: str) -> dict[str, str]:
-    conv = await db.get_conversation(conversation_id)
+async def delete_conversation(
+    request: Request, conversation_id: str,
+) -> dict[str, str]:
+    deps = _deps(request)
+    cid = UUID(conversation_id)
+
+    conv = await deps.conversations.get(cid)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    await db.delete_conversation(conversation_id)
+    await deps.conversations.delete(cid)
     return {"status": "ok"}

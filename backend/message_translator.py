@@ -1,150 +1,59 @@
-"""Translates SDK message types to WebSocket JSON and DB-ready structures."""
+"""Translates domain SDK events into WebSocket protocol events.
+
+Pure functions — no infrastructure dependencies, no SDK imports.
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-
-from claude_agent_sdk import (
-    AssistantMessage,
-    ResultMessage,
-    TextBlock,
-    ThinkingBlock,
-    ToolResultBlock,
-    ToolUseBlock,
-    UserMessage,
+from .models import (
+    AssistantTextWS,
+    ModelInfoEvent,
+    ResultEvent,
+    ResultWS,
+    SDKEvent,
+    TextEvent,
+    ThinkingEvent,
+    ThinkingWS,
+    ToolInputWS,
+    ToolResultEvent,
+    ToolResultWS,
+    ToolUseEvent,
+    ToolUseWS,
+    WSEvent,
 )
 
 
-@dataclass
-class TurnAccumulator:
-    """Accumulates SDK messages into a single assistant turn for DB persistence."""
+def translate_event(event: SDKEvent) -> list[WSEvent]:
+    """Convert a domain SDK event into WebSocket events for the frontend.
 
-    thinking: list[dict[str, str]] = field(default_factory=list)
-    tool_calls: list[dict[str, Any]] = field(default_factory=list)
-    text: str = ""
-    model: str = ""
-    usage: dict[str, Any] = field(default_factory=dict)
-    duration_ms: int = 0
-    total_cost_usd: float = 0.0
-
-    def to_content(self) -> dict[str, Any]:
-        return {
-            "thinking": self.thinking,
-            "tool_calls": self.tool_calls,
-            "text": self.text,
-            "model": self.model,
-            "usage": self.usage,
-            "duration_ms": self.duration_ms,
-            "total_cost_usd": self.total_cost_usd,
-        }
-
-
-def translate_assistant_message(
-    msg: AssistantMessage,
-    accumulator: TurnAccumulator,
-) -> list[dict[str, Any]]:
-    """Convert an AssistantMessage's content blocks into WS JSON messages.
-
-    Also updates the accumulator for later DB persistence.
+    Returns an empty list for events that have no WS representation
+    (e.g. ModelInfoEvent).
     """
-    ws_messages: list[dict[str, Any]] = []
-    message_id = msg.uuid or msg.message_id or ""
-    accumulator.model = msg.model or accumulator.model
+    match event:
+        case ThinkingEvent(thinking=t, message_id=mid):
+            return [ThinkingWS(type="thinking", thinking=t, message_id=mid)]
 
-    if msg.usage:
-        accumulator.usage = msg.usage
+        case ToolUseEvent(id=tool_id, name=name, input=inp, message_id=mid):
+            return [
+                ToolUseWS(type="tool_use", id=tool_id, name=name, message_id=mid),
+                ToolInputWS(type="tool_input", tool_use_id=tool_id, input=inp),
+            ]
 
-    for block in msg.content:
-        if isinstance(block, ThinkingBlock):
-            accumulator.thinking.append(
-                {"thinking": block.thinking, "signature": block.signature}
-            )
-            ws_messages.append(
-                {
-                    "type": "thinking",
-                    "thinking": block.thinking,
-                    "message_id": message_id,
-                }
-            )
-        elif isinstance(block, ToolUseBlock):
-            tool_entry: dict[str, Any] = {
-                "id": block.id,
-                "name": block.name,
-                "input": block.input,
-                "result": None,
-                "is_error": None,
-            }
-            accumulator.tool_calls.append(tool_entry)
-            ws_messages.append(
-                {
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "message_id": message_id,
-                }
-            )
-            ws_messages.append(
-                {
-                    "type": "tool_input",
-                    "tool_use_id": block.id,
-                    "input": block.input,
-                }
-            )
-        elif isinstance(block, ToolResultBlock):
-            # Fill in the result for the matching tool call
-            for tc in accumulator.tool_calls:
-                if tc["id"] == block.tool_use_id:
-                    tc["result"] = block.content
-                    tc["is_error"] = block.is_error
-                    break
-            ws_messages.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": block.tool_use_id,
-                    "content": block.content if isinstance(block.content, str) else str(block.content),
-                    "is_error": block.is_error or False,
-                }
-            )
-        elif isinstance(block, TextBlock):
-            accumulator.text = block.text
-            ws_messages.append(
-                {
-                    "type": "assistant_text",
-                    "text": block.text,
-                    "message_id": message_id,
-                }
-            )
+        case ToolResultEvent(tool_use_id=tid, content=c, is_error=e):
+            return [ToolResultWS(type="tool_result", tool_use_id=tid, content=c, is_error=e)]
 
-    return ws_messages
+        case TextEvent(text=t, message_id=mid):
+            return [AssistantTextWS(type="assistant_text", text=t, message_id=mid)]
 
+        case ModelInfoEvent():
+            return []
 
-def translate_user_message(msg: UserMessage) -> list[dict[str, Any]]:
-    """Translate SDK UserMessage (typically tool results) to WS JSON."""
-    ws_messages: list[dict[str, Any]] = []
-
-    if isinstance(msg.content, list):
-        for block in msg.content:
-            if isinstance(block, ToolResultBlock):
-                ws_messages.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.tool_use_id,
-                        "content": block.content if isinstance(block.content, str) else str(block.content),
-                        "is_error": block.is_error or False,
-                    }
-                )
-
-    return ws_messages
-
-
-def translate_result_message(msg: ResultMessage) -> dict[str, Any]:
-    """Translate SDK ResultMessage to WS JSON."""
-    return {
-        "type": "result",
-        "session_id": msg.session_id,
-        "duration_ms": msg.duration_ms,
-        "total_cost_usd": msg.total_cost_usd,
-        "num_turns": msg.num_turns,
-        "is_error": msg.is_error,
-    }
+        case ResultEvent(session_id=sid, duration_ms=d, total_cost_usd=c, num_turns=n, is_error=e):
+            return [ResultWS(
+                type="result",
+                session_id=sid,
+                duration_ms=d,
+                total_cost_usd=c,
+                num_turns=n,
+                is_error=e,
+            )]
