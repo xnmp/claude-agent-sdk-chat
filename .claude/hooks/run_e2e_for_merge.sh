@@ -14,7 +14,8 @@ BRANCH=$(git branch --show-current 2>/dev/null)
 echo "Running e2e tests before merge to dev..." >&2
 
 # Run e2e tests from frontend directory
-OUTPUT=$(cd frontend && npx playwright test 2>&1)
+REPO_ROOT=$(git rev-parse --show-toplevel)
+OUTPUT=$(cd "$REPO_ROOT/frontend" && npx playwright test 2>&1)
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -ne 0 ]; then
