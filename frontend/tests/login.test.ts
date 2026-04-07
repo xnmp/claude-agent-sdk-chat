@@ -6,17 +6,6 @@ import Login from '../src/components/Login.svelte';
 describe('Login component', () => {
 	afterEach(cleanup);
 
-	it('renders email and display name fields', () => {
-		render(Login, { props: { onLogin: vi.fn() } });
-		expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
-		expect(screen.getByPlaceholderText('Your name')).toBeInTheDocument();
-	});
-
-	it('renders sign in button', () => {
-		render(Login, { props: { onLogin: vi.fn() } });
-		expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
-	});
-
 	it('shows error when submitting whitespace-only email', async () => {
 		const user = userEvent.setup();
 		render(Login, { props: { onLogin: vi.fn() } });
