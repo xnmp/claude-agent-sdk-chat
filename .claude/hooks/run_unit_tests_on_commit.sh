@@ -16,7 +16,7 @@ esac
 
 echo "Running unit tests before commit..." >&2
 
-OUTPUT=$(npx vitest run 2>&1)
+OUTPUT=$(cd frontend && npx vitest run 2>&1)
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -ne 0 ]; then

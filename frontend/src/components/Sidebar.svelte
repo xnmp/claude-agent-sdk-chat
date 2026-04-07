@@ -1,18 +1,22 @@
 <script lang="ts">
-	import type { Conversation } from '$lib/types';
+	import type { Conversation, User } from '$lib/types';
 
 	let {
 		conversations,
 		activeConversationId,
 		onSelect,
 		onNew,
-		onDelete
+		onDelete,
+		user,
+		onLogout
 	}: {
 		conversations: Conversation[];
 		activeConversationId: string | null;
 		onSelect: (id: string) => void;
 		onNew: () => void;
 		onDelete: (id: string) => void;
+		user: User;
+		onLogout: () => void;
 	} = $props();
 
 	function formatDate(iso: string): string {
@@ -61,6 +65,10 @@
 		{#if conversations.length === 0}
 			<p class="empty">No conversations yet</p>
 		{/if}
+	</div>
+	<div class="sidebar-footer">
+		<span class="user-name">{user.display_name || user.email}</span>
+		<button class="logout-btn" onclick={onLogout}>Sign out</button>
 	</div>
 </aside>
 
@@ -169,5 +177,34 @@
 		text-align: center;
 		color: var(--text-dim);
 		font-size: 0.875rem;
+	}
+
+	.sidebar-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 12px 16px;
+		border-top: 1px solid var(--border);
+	}
+
+	.user-name {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.logout-btn {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		padding: 4px 8px;
+		border-radius: var(--radius);
+		transition: color 0.15s, background 0.15s;
+	}
+
+	.logout-btn:hover {
+		color: var(--text);
+		background: var(--bg-hover);
 	}
 </style>

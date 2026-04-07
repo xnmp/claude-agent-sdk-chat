@@ -30,6 +30,34 @@ def get_pool() -> asyncpg.Pool:
 
 
 # ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
+
+async def get_user_by_email(email: str) -> dict[str, Any] | None:
+    pool = get_pool()
+    row = await pool.fetchrow(
+        "SELECT id, email, display_name, created_at FROM users WHERE email = $1",
+        email,
+    )
+    return dict(row) if row else None  # type: ignore[arg-type]
+
+
+async def create_user(email: str, display_name: str) -> dict[str, Any]:
+    pool = get_pool()
+    row = await pool.fetchrow(
+        """
+        INSERT INTO users (email, display_name)
+        VALUES ($1, $2)
+        RETURNING id, email, display_name, created_at
+        """,
+        email,
+        display_name,
+    )
+    return dict(row)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
 # Conversations
 # ---------------------------------------------------------------------------
 

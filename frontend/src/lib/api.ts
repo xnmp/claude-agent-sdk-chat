@@ -1,6 +1,15 @@
-import type { Conversation, Message } from './types';
+import type { Conversation, Message, User } from './types';
 
 const BASE = 'http://localhost:8000/api';
+
+export async function login(email: string, displayName?: string): Promise<User> {
+	const res = await fetch(`${BASE}/auth/login`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ email, display_name: displayName ?? null })
+	});
+	return res.json();
+}
 
 export async function listConversations(): Promise<Conversation[]> {
 	const res = await fetch(`${BASE}/conversations`);

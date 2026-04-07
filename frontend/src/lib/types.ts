@@ -1,3 +1,9 @@
+export interface User {
+	id: string;
+	email: string;
+	display_name: string | null;
+}
+
 export interface Conversation {
 	id: string;
 	title: string | null;
