@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import CORS_ORIGINS
+from .config import CORS_ORIGINS, validate_config
 from .db import (
     PgConversationRepository,
     PgMessageRepository,
@@ -21,6 +21,7 @@ from .sdk_manager import SDKManager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    validate_config()
     pool = await init_pool()
 
     app.state.deps = AppState(
