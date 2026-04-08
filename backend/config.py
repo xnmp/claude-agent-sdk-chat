@@ -1,5 +1,8 @@
+import logging
 import os
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -24,21 +27,22 @@ ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
 # Defaults to claude-sonnet-4-5-20250514 (the CLI default when omitted).
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "")
 
-_REQUIRED_VARS = {
+_WARNED_VARS = {
     "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
 }
 
 
 def validate_config() -> None:
-    """Raise RuntimeError if any required config values are missing.
+    """Log warnings for missing config values at startup.
 
-    Call during app startup (lifespan), not at import time, so that
-    test modules can import individual config values without needing
-    every env var set.
+    Called during app lifespan, not at import time, so that test modules
+    can import individual config values without needing every env var set.
     """
-    missing = [name for name, value in _REQUIRED_VARS.items() if not value]
+    missing = [name for name, value in _WARNED_VARS.items() if not value]
     if missing:
-        raise RuntimeError(
-            f"Missing required environment variable(s): {', '.join(missing)}. "
-            "Add them to .env or export them before starting the server."
+        logger.warning(
+            "Missing environment variable(s): %s. "
+            "The server will start, but agent features will not work. "
+            "Add them to .env or export them before sending messages.",
+            ", ".join(missing),
         )
