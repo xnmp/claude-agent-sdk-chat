@@ -7,8 +7,10 @@
 	import { listConversations, createConversation, getMessages, deleteConversation, login } from '$lib/api';
 	import { createWsClient, type WsClient, type WsStatus } from '$lib/ws';
 	import { processWsMessage } from '$lib/liveTurnReducer';
+	import { loadSettings, saveSettings, applyTheme, type Settings } from '$lib/settings';
 
 	let currentUser = $state<User | null>(null);
+	let settings = $state<Settings>(loadSettings());
 	let conversations = $state<Conversation[]>([]);
 	let activeConversationId = $state<string | null>(null);
 	let messages = $state<Message[]>([]);
@@ -18,12 +20,19 @@
 	let wsStatus = $state<WsStatus>('disconnected');
 
 	onMount(() => {
+		applyTheme(settings.theme);
 		const stored = localStorage.getItem('user');
 		if (stored) {
 			currentUser = JSON.parse(stored);
 			loadConversations();
 		}
 	});
+
+	function handleSettingsChange(newSettings: Settings) {
+		settings = newSettings;
+		saveSettings(settings);
+		applyTheme(settings.theme);
+	}
 
 	async function handleLogin(email: string, displayName?: string) {
 		const user = await login(email, displayName);
@@ -158,6 +167,8 @@
 		onDelete={handleDeleteConversation}
 		user={currentUser}
 		onLogout={handleLogout}
+		{settings}
+		onSettingsChange={handleSettingsChange}
 	/>
 
 	<ChatView
@@ -165,6 +176,7 @@
 		{liveTurn}
 		{isStreaming}
 		{wsStatus}
+		{settings}
 		onSend={handleSendMessage}
 		onInterrupt={handleInterrupt}
 	/>

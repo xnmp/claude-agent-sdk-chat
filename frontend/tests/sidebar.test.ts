@@ -29,7 +29,9 @@ describe('Sidebar', () => {
 				onNew: vi.fn(),
 				onDelete: vi.fn(),
 				user: mockUser,
-				onLogout: vi.fn()
+				onLogout: vi.fn(),
+				settings: { theme: "light", showCost: true, showDuration: true },
+				onSettingsChange: vi.fn(),
 			}
 		});
 		expect(screen.getByText('Test User')).toBeInTheDocument();
@@ -44,7 +46,9 @@ describe('Sidebar', () => {
 				onNew: vi.fn(),
 				onDelete: vi.fn(),
 				user: mockUser,
-				onLogout: vi.fn()
+				onLogout: vi.fn(),
+				settings: { theme: "light", showCost: true, showDuration: true },
+				onSettingsChange: vi.fn(),
 			}
 		});
 		expect(screen.getByText('No conversations yet')).toBeInTheDocument();
@@ -63,7 +67,9 @@ describe('Sidebar', () => {
 				onNew: vi.fn(),
 				onDelete: vi.fn(),
 				user: mockUser,
-				onLogout: vi.fn()
+				onLogout: vi.fn(),
+				settings: { theme: "light", showCost: true, showDuration: true },
+				onSettingsChange: vi.fn(),
 			}
 		});
 		expect(screen.getByText('First chat')).toBeInTheDocument();
@@ -79,7 +85,9 @@ describe('Sidebar', () => {
 				onNew: vi.fn(),
 				onDelete: vi.fn(),
 				user: mockUser,
-				onLogout: vi.fn()
+				onLogout: vi.fn(),
+				settings: { theme: "light", showCost: true, showDuration: true },
+				onSettingsChange: vi.fn(),
 			}
 		});
 		expect(screen.getByText('New conversation')).toBeInTheDocument();
@@ -96,7 +104,9 @@ describe('Sidebar', () => {
 				onNew,
 				onDelete: vi.fn(),
 				user: mockUser,
-				onLogout: vi.fn()
+				onLogout: vi.fn(),
+				settings: { theme: "light", showCost: true, showDuration: true },
+				onSettingsChange: vi.fn(),
 			}
 		});
 
@@ -115,7 +125,9 @@ describe('Sidebar', () => {
 				onNew: vi.fn(),
 				onDelete: vi.fn(),
 				user: mockUser,
-				onLogout
+				onLogout,
+				settings: { theme: 'light' as const, showCost: true, showDuration: true },
+				onSettingsChange: vi.fn()
 			}
 		});
 
@@ -135,7 +147,9 @@ describe('Sidebar', () => {
 				onNew: vi.fn(),
 				onDelete: vi.fn(),
 				user: mockUser,
-				onLogout: vi.fn()
+				onLogout: vi.fn(),
+				settings: { theme: "light", showCost: true, showDuration: true },
+				onSettingsChange: vi.fn(),
 			}
 		});
 
@@ -153,7 +167,9 @@ describe('Sidebar', () => {
 				onNew: vi.fn(),
 				onDelete: vi.fn(),
 				user: mockUser,
-				onLogout: vi.fn()
+				onLogout: vi.fn(),
+				settings: { theme: "light", showCost: true, showDuration: true },
+				onSettingsChange: vi.fn(),
 			}
 		});
 
@@ -171,7 +187,9 @@ describe('Sidebar', () => {
 				onNew: vi.fn(),
 				onDelete: vi.fn(),
 				user: userNoName,
-				onLogout: vi.fn()
+				onLogout: vi.fn(),
+				settings: { theme: "light", showCost: true, showDuration: true },
+				onSettingsChange: vi.fn(),
 			}
 		});
 		expect(screen.getByText('fallback@example.com')).toBeInTheDocument();

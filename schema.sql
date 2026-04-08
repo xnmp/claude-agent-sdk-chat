@@ -25,6 +25,7 @@ CREATE TABLE messages (
     conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     role TEXT NOT NULL,
     content JSONB NOT NULL,
+    cost_usd DOUBLE PRECISION DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

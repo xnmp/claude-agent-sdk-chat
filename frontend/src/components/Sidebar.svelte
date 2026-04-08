@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Conversation, User } from '$lib/types';
+	import type { Settings } from '$lib/settings';
+	import SettingsMenu from './SettingsMenu.svelte';
 
 	let {
 		conversations,
@@ -8,7 +10,9 @@
 		onNew,
 		onDelete,
 		user,
-		onLogout
+		onLogout,
+		settings,
+		onSettingsChange
 	}: {
 		conversations: Conversation[];
 		activeConversationId: string | null;
@@ -17,6 +21,8 @@
 		onDelete: (id: string) => void;
 		user: User;
 		onLogout: () => void;
+		settings: Settings;
+		onSettingsChange: (settings: Settings) => void;
 	} = $props();
 
 	function formatDate(iso: string): string {
@@ -81,7 +87,10 @@
 			<div class="user-avatar">{(user.display_name || user.email).charAt(0).toUpperCase()}</div>
 			<span class="user-name">{user.display_name || user.email}</span>
 		</div>
-		<button class="logout-btn" onclick={onLogout}>Sign out</button>
+		<div class="footer-actions">
+			<SettingsMenu {settings} onChange={onSettingsChange} />
+			<button class="logout-btn" onclick={onLogout}>Sign out</button>
+		</div>
 	</div>
 </aside>
 
@@ -246,6 +255,13 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.footer-actions {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		flex-shrink: 0;
 	}
 
 	.logout-btn {

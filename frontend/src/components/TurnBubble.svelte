@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { Message, UserContent, AssistantContent, LiveTurn } from '$lib/types';
+	import type { Settings } from '$lib/settings';
 	import { renderMarkdown } from '$lib/markdown';
 	import ThinkingBlock from './ThinkingBlock.svelte';
 	import ToolCall from './ToolCall.svelte';
@@ -7,12 +9,33 @@
 	let {
 		message = null,
 		liveTurn = null,
-		isLive = false
+		isLive = false,
+		settings = { theme: 'light', showCost: true, showDuration: true }
 	}: {
 		message?: Message | null;
 		liveTurn?: LiveTurn | null;
 		isLive?: boolean;
+		settings?: Settings;
 	} = $props();
+
+	// Elapsed timer for live turns
+	let elapsedMs = $state(0);
+	let timerInterval: ReturnType<typeof setInterval> | undefined;
+	let startTime: number | undefined;
+
+	$effect(() => {
+		if (isLive && liveTurn) {
+			startTime = Date.now();
+			elapsedMs = 0;
+			timerInterval = setInterval(() => {
+				elapsedMs = Date.now() - startTime!;
+			}, 100);
+			return () => {
+				clearInterval(timerInterval);
+				timerInterval = undefined;
+			};
+		}
+	});
 
 	let isUser = $derived(message?.role === 'user');
 	let userContent = $derived(isUser ? (message?.content as UserContent) : null);
@@ -75,6 +98,12 @@
 					<span class="dot"></span>
 				</div>
 			{/if}
+
+			{#if settings.showDuration && elapsedMs > 0}
+				<div class="meta">
+					<span>{(elapsedMs / 1000).toFixed(1)}s</span>
+				</div>
+			{/if}
 		</div>
 	</div>
 {:else if assistantContent}
@@ -102,11 +131,15 @@
 				<div class="response-text markdown">{@html renderMarkdown(assistantContent.text)}</div>
 			{/if}
 
-			{#if assistantContent.total_cost_usd > 0}
+			{#if (settings.showCost && assistantContent.total_cost_usd > 0) || (settings.showDuration && assistantContent.duration_ms > 0)}
 				<div class="meta">
-					<span>${assistantContent.total_cost_usd.toFixed(4)}</span>
-					{#if assistantContent.duration_ms > 0}
+					{#if settings.showCost && assistantContent.total_cost_usd > 0}
+						<span>${assistantContent.total_cost_usd.toFixed(4)}</span>
+					{/if}
+					{#if settings.showCost && settings.showDuration && assistantContent.total_cost_usd > 0 && assistantContent.duration_ms > 0}
 						<span class="meta-sep">&middot;</span>
+					{/if}
+					{#if settings.showDuration && assistantContent.duration_ms > 0}
 						<span>{(assistantContent.duration_ms / 1000).toFixed(1)}s</span>
 					{/if}
 				</div>

@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import type { Message, LiveTurn } from '$lib/types';
 	import type { WsStatus } from '$lib/ws';
+	import type { Settings } from '$lib/settings';
 	import TurnBubble from './TurnBubble.svelte';
 	import MessageInput from './MessageInput.svelte';
 
@@ -10,6 +11,7 @@
 		liveTurn,
 		isStreaming,
 		wsStatus,
+		settings,
 		onSend,
 		onInterrupt
 	}: {
@@ -17,6 +19,7 @@
 		liveTurn: LiveTurn | null;
 		isStreaming: boolean;
 		wsStatus: WsStatus;
+		settings: Settings;
 		onSend: (content: string) => void;
 		onInterrupt: () => void;
 	} = $props();
@@ -57,11 +60,11 @@
 		<div class="messages" bind:this={scrollContainer}>
 			<div class="messages-inner">
 				{#each messages as msg (msg.id)}
-					<TurnBubble message={msg} />
+					<TurnBubble message={msg} {settings} />
 				{/each}
 
 				{#if liveTurn}
-					<TurnBubble {liveTurn} isLive={true} />
+					<TurnBubble {liveTurn} isLive={true} {settings} />
 				{/if}
 			</div>
 		</div>
