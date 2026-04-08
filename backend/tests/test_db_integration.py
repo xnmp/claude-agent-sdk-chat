@@ -12,7 +12,7 @@ import asyncpg
 import pytest
 
 from backend.config import DATABASE_URL
-from backend.db import PgConversationRepository, PgMessageRepository, PgUserRepository
+from backend.infra.db import PgConversationRepository, PgMessageRepository, PgUserRepository
 from backend.domain.models import MessageRole
 
 pytestmark = pytest.mark.integration

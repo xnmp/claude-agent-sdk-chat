@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import CORS_ORIGINS, validate_config
-from .db import (
+from .infra.db import (
     PgConversationRepository,
     PgMessageRepository,
     PgUserRepository,
@@ -16,7 +16,7 @@ from .db import (
 )
 from .domain.ports import AppState
 from .routers import auth, conversations, ws
-from .sdk_manager import SDKManager
+from .infra.sdk_manager import SDKManager
 
 
 @asynccontextmanager
