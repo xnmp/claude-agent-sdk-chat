@@ -18,23 +18,17 @@
 		settings?: Settings;
 	} = $props();
 
-	// Elapsed timer for live turns
+	// Elapsed timer for live turns — only depends on isLive, not liveTurn content
 	let elapsedMs = $state(0);
-	let timerInterval: ReturnType<typeof setInterval> | undefined;
-	let startTime: number | undefined;
 
 	$effect(() => {
-		if (isLive && liveTurn) {
-			startTime = Date.now();
-			elapsedMs = 0;
-			timerInterval = setInterval(() => {
-				elapsedMs = Date.now() - startTime!;
-			}, 100);
-			return () => {
-				clearInterval(timerInterval);
-				timerInterval = undefined;
-			};
-		}
+		if (!isLive) return;
+		const start = Date.now();
+		elapsedMs = 0;
+		const timer = setInterval(() => {
+			elapsedMs = Date.now() - start;
+		}, 100);
+		return () => clearInterval(timer);
 	});
 
 	let isUser = $derived(message?.role === 'user');
