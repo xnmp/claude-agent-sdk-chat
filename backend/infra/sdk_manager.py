@@ -76,7 +76,7 @@ class ClaudeSDKClientAdapter:
                     total_cost_usd=msg.total_cost_usd or 0.0,
                     num_turns=msg.num_turns,
                     is_error=msg.is_error,
-                    created_files=files,
+                    created_files=self.pop_created_files(),
                 )
 
 
