@@ -1,6 +1,6 @@
 """Unit tests for file processing — classification and prompt injection."""
 
-from backend.domain.file_processing import (
+from backend.routers.utils.file_processing import (
     FileMetadata,
     build_image_injection,
     build_other_injection,

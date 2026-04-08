@@ -11,7 +11,7 @@ import fitz  # pymupdf
 from fastapi import APIRouter, UploadFile, HTTPException
 
 from ..config import AGENT_CWD
-from ..domain.file_processing import (
+from .utils.file_processing import (
     FileMetadata,
     PromptAttachment,
     build_image_injection,
