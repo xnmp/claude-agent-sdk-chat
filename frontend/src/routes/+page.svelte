@@ -63,6 +63,7 @@
 		wsClient = null;
 		liveTurn = null;
 		isStreaming = false;
+		suggestions = [];
 
 		activeConversationId = id;
 		messages = await getMessages(id);
