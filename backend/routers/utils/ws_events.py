@@ -53,4 +53,14 @@ class ErrorWS(TypedDict):
     message: str
 
 
-WSEvent = ThinkingWS | ToolUseWS | ToolInputWS | ToolResultWS | AssistantTextWS | ResultWS | ErrorWS
+class SuggestionsWS(TypedDict):
+    type: Literal["suggestions"]
+    questions: list[str]
+
+
+class TitleUpdateWS(TypedDict):
+    type: Literal["title_update"]
+    title: str
+
+
+WSEvent = ThinkingWS | ToolUseWS | ToolInputWS | ToolResultWS | AssistantTextWS | ResultWS | ErrorWS | SuggestionsWS | TitleUpdateWS

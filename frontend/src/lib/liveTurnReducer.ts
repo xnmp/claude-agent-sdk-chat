@@ -76,5 +76,8 @@ export function processWsMessage(msg: WsMessage, current: LiveTurn | null): Turn
 
 		case 'error':
 			return { kind: 'error' };
+
+		default:
+			return { kind: 'noop' };
 	}
 }

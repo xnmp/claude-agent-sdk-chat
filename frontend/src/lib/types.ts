@@ -64,7 +64,9 @@ export type WsMessage =
 			is_error: boolean;
 			created_files: string[];
 		}
-	| { type: 'error'; message: string };
+	| { type: 'error'; message: string }
+	| { type: 'suggestions'; questions: string[] }
+	| { type: 'title_update'; title: string };
 
 // Live turn being streamed (not yet persisted)
 export interface LiveTurn {
