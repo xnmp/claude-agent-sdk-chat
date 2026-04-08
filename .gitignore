@@ -24,4 +24,5 @@ data/*
 .archive
 test-results/
 output/
+output_scripts/
 uploads/

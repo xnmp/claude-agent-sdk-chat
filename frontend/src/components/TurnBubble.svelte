@@ -18,13 +18,13 @@
 		settings?: Settings;
 	} = $props();
 
-	// Elapsed timer for live turns — only depends on isLive, not liveTurn content
+	// Elapsed timer — uses liveTurn.startedAt so it survives conversation switches
 	let elapsedMs = $state(0);
 
 	$effect(() => {
-		if (!isLive) return;
-		const start = Date.now();
-		elapsedMs = 0;
+		if (!isLive || !liveTurn) return;
+		const start = liveTurn.startedAt;
+		elapsedMs = Date.now() - start;
 		const timer = setInterval(() => {
 			elapsedMs = Date.now() - start;
 		}, 100);

@@ -3,7 +3,7 @@ import { processWsMessage } from '$lib/liveTurnReducer';
 import type { LiveTurn, WsMessage } from '$lib/types';
 
 function emptyTurn(): LiveTurn {
-	return { thinking: [], tool_calls: [], text: '' };
+	return { startedAt: Date.now(), thinking: [], tool_calls: [], text: '' };
 }
 
 describe('processWsMessage', () => {

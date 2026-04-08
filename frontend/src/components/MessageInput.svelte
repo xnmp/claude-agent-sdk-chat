@@ -19,6 +19,24 @@
 	let attachedFiles = $state<File[]>([]);
 	let fileInput: HTMLInputElement | undefined = $state();
 	let showSuggestions = $state(true);
+	let isDragging = $state(false);
+
+	function handleDragOver(e: DragEvent) {
+		e.preventDefault();
+		isDragging = true;
+	}
+
+	function handleDragLeave() {
+		isDragging = false;
+	}
+
+	function handleDrop(e: DragEvent) {
+		e.preventDefault();
+		isDragging = false;
+		if (e.dataTransfer?.files) {
+			attachedFiles = [...attachedFiles, ...Array.from(e.dataTransfer.files)];
+		}
+	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
@@ -55,7 +73,13 @@
 	}
 </script>
 
-<div class="input-area">
+<div
+	class="input-area"
+	class:dragging={isDragging}
+	ondragover={handleDragOver}
+	ondragleave={handleDragLeave}
+	ondrop={handleDrop}
+>
 	{#if suggestions.length > 0 && !isStreaming}
 		<div class="suggestions-section">
 			<button class="suggestions-toggle" onclick={() => (showSuggestions = !showSuggestions)}>
@@ -150,6 +174,13 @@
 		max-width: 768px;
 		margin: 0 auto;
 		width: 100%;
+		transition: outline 0.15s ease;
+	}
+
+	.input-area.dragging {
+		outline: 2px dashed var(--accent);
+		outline-offset: -2px;
+		border-radius: var(--radius-lg);
 	}
 
 	.suggestions-section {

@@ -70,6 +70,7 @@ export type WsMessage =
 
 // Live turn being streamed (not yet persisted)
 export interface LiveTurn {
+	startedAt: number; // Date.now() when streaming began
 	thinking: ThinkingEntry[];
 	tool_calls: ToolCallEntry[];
 	text: string;

@@ -95,7 +95,7 @@ describe('TurnBubble', () => {
 	});
 
 	it('shows streaming indicator for live turn without text', () => {
-		const liveTurn: LiveTurn = { thinking: [], tool_calls: [], text: '' };
+		const liveTurn: LiveTurn = { startedAt: Date.now(), thinking: [], tool_calls: [], text: '' };
 		const { container } = render(TurnBubble, {
 			props: { liveTurn, isLive: true }
 		});
@@ -103,7 +103,7 @@ describe('TurnBubble', () => {
 	});
 
 	it('shows text for live turn with text', () => {
-		const liveTurn: LiveTurn = { thinking: [], tool_calls: [], text: 'Streaming...' };
+		const liveTurn: LiveTurn = { startedAt: Date.now(), thinking: [], tool_calls: [], text: 'Streaming...' };
 		render(TurnBubble, { props: { liveTurn, isLive: true } });
 		expect(screen.getByText('Streaming...')).toBeInTheDocument();
 	});

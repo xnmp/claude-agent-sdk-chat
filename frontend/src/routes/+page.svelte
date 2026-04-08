@@ -67,7 +67,7 @@
 			// Stash state and keep WS alive in background
 			const convId = activeConversationId;
 			const bg: BgStream = {
-				turn: liveTurn ?? { thinking: [], tool_calls: [], text: '' },
+				turn: liveTurn ?? { startedAt: Date.now(), thinking: [], tool_calls: [], text: '' },
 				suggestions,
 				ws: wsClient,
 				done: false,
@@ -174,7 +174,7 @@
 		messages = [...messages, userMsg];
 
 		isStreaming = true;
-		liveTurn = { thinking: [], tool_calls: [], text: '' };
+		liveTurn = { startedAt: Date.now(), thinking: [], tool_calls: [], text: '' };
 
 		wsClient.send(content || `[Attached: ${files.map(f => f.name).join(', ')}]`, attachmentIds);
 	}

@@ -17,7 +17,7 @@ export type TurnAction =
  * how to apply it to reactive state.
  */
 export function processWsMessage(msg: WsMessage, current: LiveTurn | null): TurnAction {
-	const turn: LiveTurn = current ?? { thinking: [], tool_calls: [], text: '' };
+	const turn: LiveTurn = current ?? { startedAt: Date.now(), thinking: [], tool_calls: [], text: '' };
 
 	switch (msg.type) {
 		case 'thinking':
