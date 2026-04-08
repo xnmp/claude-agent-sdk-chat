@@ -3,15 +3,7 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
-
-from claude_agent_sdk.types import (
-    HookContext,
-    PreToolUseHookInput,
-    PostToolUseHookInput,
-    SyncHookJSONOutput,
-)
 
 
 def make_hooks(output_dir: str) -> dict:
@@ -21,21 +13,24 @@ def make_hooks(output_dir: str) -> dict:
     reference to the created_files set for retrieval after a turn.
     """
     created_files: set[str] = set()
-    abs_output = os.path.abspath(output_dir)
+    abs_output = os.path.realpath(output_dir)
+
+    # Hook inputs arrive as plain dicts, not typed dataclasses.
 
     async def enforce_output_dir(
-        input_data: PreToolUseHookInput,
+        input_data: dict[str, Any],
         tool_use_id: str | None,
-        context: HookContext,
-    ) -> SyncHookJSONOutput:
-        file_path = input_data.tool_input.get("file_path", "")
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        tool_input = input_data.get("tool_input", {})
+        file_path = tool_input.get("file_path", "")
         if not file_path:
-            return SyncHookJSONOutput()
+            return {}
 
-        abs_path = os.path.abspath(file_path)
+        abs_path = os.path.realpath(file_path)
         if not abs_path.startswith(abs_output + os.sep) and abs_path != abs_output:
-            return SyncHookJSONOutput(
-                hookSpecificOutput={
+            return {
+                "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
@@ -43,22 +38,22 @@ def make_hooks(output_dir: str) -> dict:
                         f"Got: {file_path}"
                     ),
                 }
-            )
-        return SyncHookJSONOutput()
+            }
+        return {}
 
     async def track_created_files(
-        input_data: PostToolUseHookInput,
+        input_data: dict[str, Any],
         tool_use_id: str | None,
-        context: HookContext,
-    ) -> SyncHookJSONOutput:
-        file_path = input_data.tool_input.get("file_path", "")
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        tool_input = input_data.get("tool_input", {})
+        file_path = tool_input.get("file_path", "")
         if file_path:
-            abs_path = os.path.abspath(file_path)
+            abs_path = os.path.realpath(file_path)
             if abs_path.startswith(abs_output + os.sep) and os.path.isfile(abs_path):
-                # Store path relative to output_dir for serving
                 rel = os.path.relpath(abs_path, abs_output)
                 created_files.add(rel)
-        return SyncHookJSONOutput()
+        return {}
 
     from claude_agent_sdk import HookMatcher
 

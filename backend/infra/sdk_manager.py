@@ -41,7 +41,7 @@ class ClaudeSDKClientAdapter:
 
     def __init__(self, client: ClaudeSDKClient, created_files: set[str] | None = None) -> None:
         self._client = client
-        self.created_files: set[str] = created_files or set()
+        self.created_files: set[str] = created_files if created_files is not None else set()
 
     async def connect(self) -> None:
         await self._client.connect()
@@ -76,7 +76,7 @@ class ClaudeSDKClientAdapter:
                     total_cost_usd=msg.total_cost_usd or 0.0,
                     num_turns=msg.num_turns,
                     is_error=msg.is_error,
-                    created_files=self.pop_created_files(),
+                    created_files=files,
                 )
 
 
