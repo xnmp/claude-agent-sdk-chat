@@ -59,6 +59,13 @@
 
 		const client = createWsClient(id, handleWsMessage);
 		client.setOnStatusChange((s) => (wsStatus = s));
+		client.setOnDisconnect(() => {
+			// Reset streaming state on unexpected disconnect
+			if (isStreaming) {
+				isStreaming = false;
+				liveTurn = null;
+			}
+		});
 		client.connect();
 		wsClient = client;
 	}
