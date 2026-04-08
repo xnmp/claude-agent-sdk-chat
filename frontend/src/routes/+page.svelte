@@ -20,6 +20,10 @@
 	let wsStatus = $state<WsStatus>('disconnected');
 	let suggestions = $state<string[]>([]);
 
+	// Per-conversation background streaming state
+	interface BgStream { turn: LiveTurn; suggestions: string[]; ws: WsClient; done: boolean }
+	const bgStreams = new Map<string, BgStream>();
+
 	onMount(() => {
 		applyTheme(settings.theme);
 		const stored = localStorage.getItem('user');
@@ -59,14 +63,26 @@
 	async function selectConversation(id: string) {
 		if (activeConversationId === id) return;
 
-		if (isStreaming && wsClient) {
-			// Response still generating — let the old WS finish in the background.
-			// Detach the message handler so events don't update the wrong conversation.
-			// The server will persist the turn when it completes.
-			const orphan = wsClient;
-			orphan.setOnStatusChange(() => {});
-			orphan.setOnDisconnect(() => {});
-			// Don't disconnect — let it run until the server finishes
+		if (isStreaming && wsClient && activeConversationId) {
+			// Stash state and keep WS alive in background
+			const convId = activeConversationId;
+			const bg: BgStream = {
+				turn: liveTurn ?? { thinking: [], tool_calls: [], text: '' },
+				suggestions,
+				ws: wsClient,
+				done: false,
+			};
+			bgStreams.set(convId, bg);
+
+			// Rewire WS callbacks to update bg state instead of UI
+			const bgWs = wsClient;
+			bgWs.setOnStatusChange(() => {});
+			bgWs.setOnDisconnect(() => {
+				bg.done = true;
+			});
+			// Note: the WS will keep calling handleWsMessage, which checks
+			// activeConversationId. Events for the old conversation will be
+			// routed to bgStreams in handleWsMessage below.
 		} else {
 			wsClient?.disconnect();
 		}
@@ -79,17 +95,28 @@
 		activeConversationId = id;
 		messages = await getMessages(id);
 
-		// If the last message is from the user, a response may still be
-		// generating in the background. Show streaming indicator and poll
-		// for the completed response.
-		const lastMsg = messages[messages.length - 1];
-		if (lastMsg && lastMsg.role === 'user') {
-			liveTurn = { thinking: [], tool_calls: [], text: '' };
-			isStreaming = true;
-			_pollForResponse(id);
+		// Restore from background stream if one exists
+		const bg = bgStreams.get(id);
+		if (bg) {
+			if (bg.done) {
+				// Turn completed in background — reload messages
+				messages = await getMessages(id);
+				suggestions = bg.suggestions;
+				bg.ws.disconnect();
+				bgStreams.delete(id);
+			} else {
+				// Still streaming — restore live state and reattach WS
+				liveTurn = bg.turn;
+				isStreaming = true;
+				suggestions = bg.suggestions;
+				wsClient = bg.ws;
+				wsStatus = 'connected';
+				bgStreams.delete(id);
+				return; // Don't create a new WS
+			}
 		}
 
-		const client = createWsClient(id, handleWsMessage);
+		const client = createWsClient(id, _makeWsHandler(id));
 		client.setOnStatusChange((s) => (wsStatus = s));
 		client.setOnDisconnect(() => {
 			if (isStreaming) {
@@ -109,6 +136,8 @@
 
 	async function handleDeleteConversation(id: string) {
 		await deleteConversation(id);
+		const bg = bgStreams.get(id);
+		if (bg) { bg.ws.disconnect(); bgStreams.delete(id); }
 		conversations = conversations.filter((c) => c.id !== id);
 		if (activeConversationId === id) {
 			activeConversationId = null;
@@ -121,7 +150,6 @@
 	async function handleSendMessage(content: string, files: File[] = []) {
 		if (!wsClient || isStreaming || !activeConversationId) return;
 
-		// Upload files first
 		const attachmentIds: string[] = [];
 		for (const file of files) {
 			try {
@@ -151,26 +179,74 @@
 		wsClient.send(content || `[Attached: ${files.map(f => f.name).join(', ')}]`, attachmentIds);
 	}
 
-	async function _pollForResponse(convId: string) {
-		for (let i = 0; i < 60; i++) {
-			await new Promise((r) => setTimeout(r, 2000));
-			// Stop polling if user switched away or streaming ended
-			if (activeConversationId !== convId || !isStreaming) return;
-			const updated = await getMessages(convId);
-			const last = updated[updated.length - 1];
-			if (last && last.role === 'assistant') {
-				messages = updated;
-				liveTurn = null;
-				isStreaming = false;
-				loadConversations();
+	function _makeWsHandler(convId: string): (msg: WsMessage) => void {
+		return (msg: WsMessage) => {
+			// If this conversation is in the background, update its bgStream
+			const bg = bgStreams.get(convId);
+			if (bg) {
+				if (msg.type === 'suggestions') {
+					bg.suggestions = msg.questions;
+				} else if (msg.type === 'title_update') {
+					conversations = conversations.map((c) =>
+						c.id === convId ? { ...c, title: msg.title } : c
+					);
+				} else {
+					const action = processWsMessage(msg, bg.turn);
+					if (action.kind === 'update') {
+						bg.turn = action.turn;
+						// If user is viewing this conversation, sync to UI
+						if (activeConversationId === convId) {
+							liveTurn = bg.turn;
+						}
+					} else if (action.kind === 'finalize') {
+						bg.done = true;
+						// If user is viewing this conversation, finalize in UI
+						if (activeConversationId === convId) {
+							_finalizeFromBg(convId, action.turn, msg);
+						}
+					} else if (action.kind === 'error') {
+						bg.done = true;
+						if (activeConversationId === convId) {
+							isStreaming = false;
+							liveTurn = null;
+						}
+					}
+				}
 				return;
 			}
+
+			// Active conversation — update UI directly
+			if (convId !== activeConversationId) return;
+			handleWsMessage(msg);
+		};
+	}
+
+	function _finalizeFromBg(convId: string, turn: LiveTurn, msg: WsMessage) {
+		if (msg.type === 'result') {
+			const assistantMsg: Message = {
+				id: crypto.randomUUID(),
+				conversation_id: convId,
+				role: 'assistant',
+				content: {
+					thinking: turn.thinking,
+					tool_calls: turn.tool_calls,
+					text: turn.text,
+					model: '',
+					usage: {},
+					duration_ms: msg.duration_ms,
+					total_cost_usd: msg.total_cost_usd ?? 0,
+					created_files: msg.created_files ?? []
+				} satisfies AssistantContent,
+				created_at: new Date().toISOString()
+			};
+			messages = [...messages, assistantMsg];
 		}
-		// Timeout — clear the indicator
-		if (activeConversationId === convId) {
-			liveTurn = null;
-			isStreaming = false;
-		}
+		liveTurn = null;
+		isStreaming = false;
+		suggestions = [];
+		const bg = bgStreams.get(convId);
+		if (bg) { bg.ws.disconnect(); bgStreams.delete(convId); }
+		loadConversations();
 	}
 
 	function handleInterrupt() {
@@ -178,7 +254,14 @@
 	}
 
 	function handleWsMessage(msg: WsMessage) {
-		// Handle background task results (arrive after turn completes)
+		// Route events for background conversations to their bgStream
+		// The WS handler closure doesn't know which conversation it's for,
+		// but we can check: if we're not streaming on the active conversation
+		// but there are background streams, route to the right one.
+		// However, the WS is per-conversation, so events always belong to
+		// the conversation that created the WS. Since we reattach the WS
+		// on restore, this handler is always for the active conversation.
+
 		if (msg.type === 'suggestions') {
 			suggestions = msg.questions;
 			return;
