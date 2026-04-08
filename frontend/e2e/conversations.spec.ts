@@ -34,7 +34,7 @@ test.describe('Conversation lifecycle', () => {
 	test('create conversation increases sidebar count', async ({ page }) => {
 		const initialCount = await page.locator('.conversation-item').count();
 
-		await page.getByRole('button', { name: '+ New' }).click();
+		await page.getByRole('button', { name: 'New', exact: true }).click();
 
 		await expect(page.locator('.conversation-item')).toHaveCount(initialCount + 1);
 		// The newest conversation should be first and untitled
@@ -42,7 +42,7 @@ test.describe('Conversation lifecycle', () => {
 	});
 
 	test('selecting conversation shows chat view', async ({ page }) => {
-		await page.getByRole('button', { name: '+ New' }).click();
+		await page.getByRole('button', { name: 'New', exact: true }).click();
 
 		// Click the first (newest) conversation
 		await page.locator('.conversation-item').first().click();
@@ -55,7 +55,7 @@ test.describe('Conversation lifecycle', () => {
 		const initialCount = await page.locator('.conversation-item').count();
 
 		// Create a fresh conversation to delete, wait for it to appear
-		await page.getByRole('button', { name: '+ New' }).click();
+		await page.getByRole('button', { name: 'New', exact: true }).click();
 		await expect(page.locator('.conversation-item')).toHaveCount(initialCount + 1);
 
 		// Hover the first item and delete it
@@ -68,8 +68,8 @@ test.describe('Conversation lifecycle', () => {
 	test('multiple conversations can be created and switched', async ({ page }) => {
 		const initialCount = await page.locator('.conversation-item').count();
 
-		await page.getByRole('button', { name: '+ New' }).click();
-		await page.getByRole('button', { name: '+ New' }).click();
+		await page.getByRole('button', { name: 'New', exact: true }).click();
+		await page.getByRole('button', { name: 'New', exact: true }).click();
 
 		await expect(page.locator('.conversation-item')).toHaveCount(initialCount + 2);
 
