@@ -18,7 +18,7 @@ TEXT_EXTENSIONS = {
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
 
-MAX_INLINE_TEXT_BYTES = 50_000  # 50KB
+MAX_INLINE_TEXT_BYTES = 8_000  # ~2000 tokens
 MAX_INLINE_IMAGE_BYTES = 5_000_000  # 5MB
 
 
@@ -59,7 +59,7 @@ def build_text_injection(meta: FileMetadata, content: str) -> PromptAttachment:
         )
     return PromptAttachment(
         filename=meta.filename,
-        injection=f"\n\n[File too large for inline display. Available at: {meta.path}]",
+        injection=f"\n\n[File attached: {meta.filename} ({meta.size} bytes) — too large to inline. Read it at: {meta.path}]",
     )
 
 
@@ -72,7 +72,7 @@ def build_image_injection(meta: FileMetadata) -> PromptAttachment:
         )
     return PromptAttachment(
         filename=meta.filename,
-        injection=f"\n\n[Image too large for inline display. Available at: {meta.path}]",
+        injection=f"\n\n[Image attached: {meta.filename} ({meta.size} bytes) — too large to inline. Available at: {meta.path}]",
     )
 
 
