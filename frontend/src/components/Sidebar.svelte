@@ -63,7 +63,7 @@
 	}
 </script>
 
-<aside class="sidebar" class:collapsed style="width: {collapsed ? 0 : sidebarWidth}px; min-width: {collapsed ? 0 : sidebarWidth}px">
+<aside class="sidebar" class:collapsed class:resizing={isResizing} style="width: {collapsed ? 0 : sidebarWidth}px; min-width: {collapsed ? 0 : sidebarWidth}px">
 	{#if !collapsed}
 	<div class="sidebar-header">
 		<h2>Conversations</h2>
@@ -147,6 +147,10 @@
 
 	.sidebar.collapsed {
 		border-right: none;
+	}
+
+	.sidebar.resizing {
+		transition: none;
 	}
 
 	.resize-handle {
