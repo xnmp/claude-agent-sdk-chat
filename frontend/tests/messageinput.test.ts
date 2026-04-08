@@ -94,4 +94,32 @@ describe('MessageInput', () => {
 		});
 		expect(screen.getByRole('textbox')).toBeDisabled();
 	});
+
+	it('renders suggestion chips when suggestions provided', () => {
+		render(MessageInput, {
+			props: {
+				isStreaming: false,
+				disabled: false,
+				onSend: vi.fn(),
+				onInterrupt: vi.fn(),
+				suggestions: ['Question 1?', 'Question 2?']
+			}
+		});
+		expect(screen.getByText('Suggestions')).toBeInTheDocument();
+		expect(screen.getByText('Question 1?')).toBeInTheDocument();
+		expect(screen.getByText('Question 2?')).toBeInTheDocument();
+	});
+
+	it('hides suggestions when streaming', () => {
+		const { container } = render(MessageInput, {
+			props: {
+				isStreaming: true,
+				disabled: false,
+				onSend: vi.fn(),
+				onInterrupt: vi.fn(),
+				suggestions: ['Question 1?']
+			}
+		});
+		expect(container.querySelector('.suggestions-section')).toBeNull();
+	});
 });

@@ -211,7 +211,6 @@
 		{suggestions}
 		onSend={handleSendMessage}
 		onInterrupt={handleInterrupt}
-		onSuggestionClick={(q) => handleSendMessage(q)}
 	/>
 {:else}
 	<Login onLogin={handleLogin} />
