@@ -158,6 +158,11 @@ class SDKManager:
             permission_mode="acceptEdits",
             cwd=AGENT_CWD,
             model=ANTHROPIC_MODEL or None,
+            system_prompt=(
+                f"When creating or writing files, always use the output/ folder "
+                f"(full path: {output_dir}/). File writes outside this folder will be denied. "
+                f"Use absolute paths like {output_dir}/filename.ext for the Write tool."
+            ),
             setting_sources=["user", "project"],
             sandbox={
                 "enabled": True,
