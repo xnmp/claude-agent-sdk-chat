@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import patch
 
-from backend import config
+from backend.config import settings as config
 
 
 class TestValidateConfig:
