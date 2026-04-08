@@ -162,5 +162,5 @@
 		onInterrupt={handleInterrupt}
 	/>
 {:else}
-	<Login onSubmit={handleLogin} />
+	<Login onLogin={handleLogin} />
 {/if}

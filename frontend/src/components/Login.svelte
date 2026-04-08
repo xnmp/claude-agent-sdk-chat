@@ -1,9 +1,9 @@
 <script lang="ts">
 	let {
-		onSubmit,
+		onLogin,
 		error = ''
 	}: {
-		onSubmit: (email: string, displayName?: string) => Promise<void>;
+		onLogin: (email: string, displayName?: string) => Promise<void>;
 		error?: string;
 	} = $props();
 
@@ -24,7 +24,7 @@
 		}
 		loading = true;
 		try {
-			await onSubmit(trimmedEmail, displayName.trim() || undefined);
+			await onLogin(trimmedEmail, displayName.trim() || undefined);
 		} catch (err) {
 			localError = err instanceof Error ? err.message : 'Login failed';
 		} finally {

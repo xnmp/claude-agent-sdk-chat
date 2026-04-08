@@ -8,7 +8,7 @@ describe('Login component', () => {
 
 	it('shows error when submitting whitespace-only email', async () => {
 		const user = userEvent.setup();
-		render(Login, { props: { onSubmit: vi.fn() } });
+		render(Login, { props: { onLogin: vi.fn() } });
 
 		const emailInput = screen.getByPlaceholderText('you@example.com');
 		// Remove the required attribute so the form submits, then test our custom validation
