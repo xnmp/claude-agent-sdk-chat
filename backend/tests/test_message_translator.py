@@ -9,6 +9,7 @@ from __future__ import annotations
 from backend.routers.utils.message_translator import translate_event
 from backend.domain.models import (
     ModelInfoEvent,
+    ResultEvent,
     ToolUseEvent,
 )
 
@@ -31,6 +32,25 @@ class TestTranslateModelInfoEvent:
         """ModelInfoEvent is internal — not sent to frontend."""
         result = translate_event(ModelInfoEvent(model="claude-sonnet-4-20250514", usage={"input_tokens": 10}))
         assert result == []
+
+
+class TestTranslateResultEvent:
+    def test_created_files_included_in_ws_event(self):
+        event = ResultEvent(
+            session_id="s1", duration_ms=100, total_cost_usd=0.01,
+            num_turns=1, is_error=False, created_files=["report.csv", "chart.png"],
+        )
+        result = translate_event(event)
+        assert len(result) == 1
+        assert result[0]["created_files"] == ["report.csv", "chart.png"]
+
+    def test_empty_created_files(self):
+        event = ResultEvent(
+            session_id="s1", duration_ms=50, total_cost_usd=0.0,
+            num_turns=1, is_error=False,
+        )
+        result = translate_event(event)
+        assert result[0]["created_files"] == []
 
 
 class TestTranslateFullTurn:
