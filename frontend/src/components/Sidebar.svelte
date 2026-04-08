@@ -25,6 +25,25 @@
 		onSettingsChange: (settings: Settings) => void;
 	} = $props();
 
+	let sidebarWidth = $state(280);
+	let collapsed = $state(false);
+	let isResizing = $state(false);
+
+	function startResize(e: MouseEvent) {
+		e.preventDefault();
+		isResizing = true;
+		const onMove = (ev: MouseEvent) => {
+			sidebarWidth = Math.max(200, Math.min(500, ev.clientX));
+		};
+		const onUp = () => {
+			isResizing = false;
+			window.removeEventListener('mousemove', onMove);
+			window.removeEventListener('mouseup', onUp);
+		};
+		window.addEventListener('mousemove', onMove);
+		window.addEventListener('mouseup', onUp);
+	}
+
 	function formatDate(iso: string): string {
 		const d = new Date(iso);
 		const now = new Date();
@@ -40,7 +59,8 @@
 	}
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:collapsed style="width: {collapsed ? 0 : sidebarWidth}px; min-width: {collapsed ? 0 : sidebarWidth}px">
+	{#if !collapsed}
 	<div class="sidebar-header">
 		<h2>Conversations</h2>
 		<button class="new-btn" onclick={onNew}>
@@ -92,17 +112,84 @@
 			<button class="logout-btn" onclick={onLogout}>Sign out</button>
 		</div>
 	</div>
+	{/if}
 </aside>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="resize-handle"
+	class:collapsed
+	onmousedown={collapsed ? null : startResize}
+>
+	<button class="collapse-btn" onclick={() => (collapsed = !collapsed)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+		<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+			{#if collapsed}
+				<polyline points="4,2 8,6 4,10" />
+			{:else}
+				<polyline points="8,2 4,6 8,10" />
+			{/if}
+		</svg>
+	</button>
+</div>
 
 <style>
 	.sidebar {
-		width: 300px;
-		min-width: 300px;
 		background: var(--bg-surface);
 		border-right: 1px solid var(--border);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+		transition: width 0.15s ease, min-width 0.15s ease;
+	}
+
+	.sidebar.collapsed {
+		border-right: none;
+	}
+
+	.resize-handle {
+		width: 6px;
+		cursor: col-resize;
+		background: transparent;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+		flex-shrink: 0;
+		transition: background 0.12s ease;
+	}
+
+	.resize-handle:hover {
+		background: var(--border);
+	}
+
+	.resize-handle.collapsed {
+		cursor: default;
+		width: 20px;
+	}
+
+	.collapse-btn {
+		position: absolute;
+		width: 20px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		color: var(--text-dim);
+		opacity: 0;
+		transition: opacity 0.15s ease;
+		z-index: 10;
+	}
+
+	.resize-handle:hover .collapse-btn,
+	.resize-handle.collapsed .collapse-btn {
+		opacity: 1;
+	}
+
+	.collapse-btn:hover {
+		color: var(--text);
+		background: var(--bg-hover);
 	}
 
 	.sidebar-header {
