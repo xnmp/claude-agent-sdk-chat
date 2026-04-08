@@ -32,11 +32,15 @@
 	function startResize(e: MouseEvent) {
 		e.preventDefault();
 		isResizing = true;
+		document.body.style.cursor = 'col-resize';
+		document.body.style.userSelect = 'none';
 		const onMove = (ev: MouseEvent) => {
 			sidebarWidth = Math.max(200, Math.min(500, ev.clientX));
 		};
 		const onUp = () => {
 			isResizing = false;
+			document.body.style.cursor = '';
+			document.body.style.userSelect = '';
 			window.removeEventListener('mousemove', onMove);
 			window.removeEventListener('mouseup', onUp);
 		};
