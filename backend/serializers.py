@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import Conversation, Message, User
+from .domain.models import Conversation, Message, User
 
 
 def serialize_user(user: User) -> dict[str, Any]:

@@ -8,9 +8,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from ..chat import ChatSession, ConversationNotFoundError
-from ..models import ErrorWS, WSEvent
-from ..ports import AppState
+from ..domain.chat import ChatSession, ConversationNotFoundError
+from ..domain.models import ErrorWS, WSEvent
+from ..domain.ports import AppState
 
 logger = logging.getLogger(__name__)
 

@@ -22,7 +22,7 @@ from claude_agent_sdk import (
 )
 
 from .config import AGENT_CWD, ANTHROPIC_MODEL
-from .models import (
+from .domain.models import (
     ModelInfoEvent,
     ResultEvent,
     SDKEvent,

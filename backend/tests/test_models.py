@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.models import (
+from backend.domain.models import (
     AssistantTurn,
     ModelInfoEvent,
     ResultEvent,

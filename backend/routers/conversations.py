@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from ..ports import AppState
+from ..domain.ports import AppState
 from ..serializers import serialize_conversation, serialize_message
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])

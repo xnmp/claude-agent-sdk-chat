@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from backend.models import (
+from backend.domain.models import (
     ANONYMOUS_USER_ID,
     Conversation,
     Message,
