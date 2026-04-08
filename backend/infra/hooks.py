@@ -121,14 +121,50 @@ def make_hooks(
                 created_files.add(rel)
         return {}
 
+    # Snapshot of output/ files before each Bash command
+    bash_snapshot: set[str] = set()
+
+    def _scan_output() -> set[str]:
+        found: set[str] = set()
+        for root, _dirs, files in os.walk(abs_output):
+            for fname in files:
+                full = os.path.join(root, fname)
+                found.add(os.path.relpath(full, abs_output))
+        return found
+
+    async def snapshot_output_before_bash(
+        input_data: dict[str, Any],
+        tool_use_id: str | None,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Snapshot output/ before Bash so we can diff after."""
+        bash_snapshot.clear()
+        bash_snapshot.update(_scan_output())
+        return {}
+
+    async def diff_output_after_bash(
+        input_data: dict[str, Any],
+        tool_use_id: str | None,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """After Bash, track any new files in output/."""
+        current = _scan_output()
+        new_files = current - bash_snapshot
+        created_files.update(new_files)
+        return {}
+
     from claude_agent_sdk import HookMatcher
 
     hooks = {
         "PreToolUse": [
             HookMatcher(matcher="Write|Edit", hooks=[enforce_write_dirs]),  # type: ignore[list-item]
             HookMatcher(matcher="Read", hooks=[enforce_read_dirs, limit_read_size]),  # type: ignore[list-item]
+            HookMatcher(matcher="Bash", hooks=[snapshot_output_before_bash]),  # type: ignore[list-item]
         ],
-        "PostToolUse": [HookMatcher(matcher="Write|Edit", hooks=[track_created_files])],  # type: ignore[list-item]
+        "PostToolUse": [
+            HookMatcher(matcher="Write|Edit", hooks=[track_created_files]),  # type: ignore[list-item]
+            HookMatcher(matcher="Bash", hooks=[diff_output_after_bash]),  # type: ignore[list-item]
+        ],
     }
 
     return {"hooks": hooks, "created_files": created_files}
