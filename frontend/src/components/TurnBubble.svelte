@@ -35,25 +35,15 @@
 	let userContent = $derived(isUser ? (message?.content as UserContent) : null);
 	let assistantContent = $derived(!isUser && message ? (message.content as AssistantContent) : null);
 
-	let liveHasSubMessages = $derived(
-		liveTurn ? liveTurn.thinking.length > 0 || liveTurn.tool_calls.length > 0 : false
-	);
+	let liveHasThinking = $derived(liveTurn ? liveTurn.thinking.length > 0 : false);
+	let liveToolCount = $derived(liveTurn ? liveTurn.tool_calls.length : 0);
+	let liveHasSubMessages = $derived(liveHasThinking || liveToolCount > 0);
 
-	let hasSubMessages = $derived(
-		assistantContent
-			? assistantContent.thinking.length > 0 || assistantContent.tool_calls.length > 0
-			: false
-	);
+	let hasThinking = $derived(assistantContent ? assistantContent.thinking.length > 0 : false);
+	let toolCallCount = $derived(assistantContent ? assistantContent.tool_calls.length : 0);
+	let hasSubMessages = $derived(hasThinking || toolCallCount > 0);
 
 	let showSubMessages = $state(false);
-
-	let toolCallCount = $derived(
-		isLive && liveTurn
-			? liveTurn.tool_calls.length
-			: assistantContent
-				? assistantContent.tool_calls.length
-				: 0
-	);
 </script>
 
 {#if isUser && userContent}
@@ -70,12 +60,20 @@
 					<svg class="toggle-icon" class:open={showSubMessages} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
 						<polyline points="4,2 8,6 4,10" />
 					</svg>
-					{toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
+					{#if liveHasThinking && liveToolCount === 0}
+						Thinking...
+					{:else if liveHasThinking && liveToolCount > 0}
+						Thought &middot; {liveToolCount} tool call{liveToolCount !== 1 ? 's' : ''}
+					{:else}
+						{liveToolCount} tool call{liveToolCount !== 1 ? 's' : ''}
+					{/if}
 				</button>
 
 				{#if showSubMessages}
 					<div class="sub-messages">
-						<ThinkingBlock entries={liveTurn.thinking} />
+						{#if liveHasThinking}
+							<ThinkingBlock entries={liveTurn.thinking} />
+						{/if}
 						{#each liveTurn.tool_calls as tool (tool.id)}
 							<ToolCall {tool} />
 						{/each}
@@ -108,12 +106,20 @@
 					<svg class="toggle-icon" class:open={showSubMessages} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
 						<polyline points="4,2 8,6 4,10" />
 					</svg>
-					{toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
+					{#if hasThinking && toolCallCount === 0}
+						Thought
+					{:else if hasThinking && toolCallCount > 0}
+						Thought &middot; {toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
+					{:else}
+						{toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
+					{/if}
 				</button>
 
 				{#if showSubMessages}
 					<div class="sub-messages">
-						<ThinkingBlock entries={assistantContent.thinking} />
+						{#if hasThinking}
+							<ThinkingBlock entries={assistantContent.thinking} />
+						{/if}
 						{#each assistantContent.tool_calls as tool (tool.id)}
 							<ToolCall {tool} />
 						{/each}
