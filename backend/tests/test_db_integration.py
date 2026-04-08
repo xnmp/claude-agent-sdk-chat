@@ -13,7 +13,7 @@ import pytest
 
 from backend.config import DATABASE_URL
 from backend.infra.db import PgConversationRepository, PgMessageRepository, PgUserRepository
-from backend.domain.models import MessageRole
+from backend.domain.models import AssistantMessageContent, MessageRole
 
 pytestmark = pytest.mark.integration
 
@@ -196,7 +196,7 @@ class TestPgMessageRepository:
         self, conv_repo: PgConversationRepository, msg_repo: PgMessageRepository,
     ):
         conv = await conv_repo.create(title="TEST-jsonb")
-        complex_content = {
+        complex_content: AssistantMessageContent = {
             "thinking": [{"thinking": "deep thought", "signature": "xyz"}],
             "tool_calls": [
                 {"id": "t1", "name": "Read", "input": {"file_path": "/tmp/x"}, "result": "contents", "is_error": False},
