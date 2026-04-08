@@ -60,9 +60,18 @@ class ChatSession:
         self._sdk_session_id = conv.sdk_session_id
         self._client = await self._ensure_sdk_client()
 
-    async def handle_user_message(self, content: str) -> AsyncIterator[SDKEvent]:
-        """Process a user message and yield domain events."""
-        # Persist user message
+    async def handle_user_message(
+        self, content: str, *, prompt_override: str | None = None,
+    ) -> AsyncIterator[SDKEvent]:
+        """Process a user message and yield domain events.
+
+        Args:
+            content: The user's message text (persisted to DB, used for auto-title).
+            prompt_override: If provided, sent to the SDK instead of content.
+                Used when file injections are appended to the prompt but shouldn't
+                pollute the stored message or conversation title.
+        """
+        # Persist user message (original text, not enriched prompt)
         await self._messages.save(
             conversation_id=self.conversation_id,
             role=MessageRole.USER,
@@ -73,8 +82,8 @@ class ChatSession:
         if self._client is None:
             self._client = await self._ensure_sdk_client()
 
-        # Query the agent and stream response
-        await self._client.query(content)
+        # Query the agent — use enriched prompt if provided, otherwise original text
+        await self._client.query(prompt_override or content)
 
         turn = AssistantTurn()
         self._pending_turn = turn
