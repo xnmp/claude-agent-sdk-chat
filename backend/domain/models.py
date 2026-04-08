@@ -53,6 +53,7 @@ class AssistantMessageContent(TypedDict):
     usage: dict[str, Any]
     duration_ms: int
     total_cost_usd: float
+    created_files: list[str]
 
 
 MessageContent = UserMessageContent | AssistantMessageContent
@@ -159,6 +160,7 @@ class AssistantTurn:
     usage: dict[str, Any] = field(default_factory=dict)
     duration_ms: int = 0
     total_cost_usd: float = 0.0
+    created_files: list[str] = field(default_factory=list)
 
     def process(self, event: SDKEvent) -> None:
         """Update accumulator state from an SDK event."""
@@ -181,9 +183,10 @@ class AssistantTurn:
                 self.model = m or self.model
                 if u:
                     self.usage = u
-            case ResultEvent(duration_ms=d, total_cost_usd=c):
+            case ResultEvent(duration_ms=d, total_cost_usd=c, created_files=f):
                 self.duration_ms = d
                 self.total_cost_usd = c
+                self.created_files = f
 
     def has_content(self) -> bool:
         """True if the turn has accumulated any meaningful content."""
@@ -198,4 +201,5 @@ class AssistantTurn:
             usage=self.usage,
             duration_ms=self.duration_ms,
             total_cost_usd=self.total_cost_usd,
+            created_files=self.created_files,
         )
