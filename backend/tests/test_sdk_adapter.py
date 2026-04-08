@@ -25,7 +25,7 @@ from backend.domain.models import (
     ToolResultEvent,
     ToolUseEvent,
 )
-from backend.sdk_manager import _translate_assistant, _translate_user
+from backend.infra.sdk_manager import _translate_assistant, _translate_user
 
 
 class TestTranslateAssistant:

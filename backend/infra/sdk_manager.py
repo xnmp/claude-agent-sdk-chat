@@ -21,8 +21,8 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from .config import AGENT_CWD, ANTHROPIC_MODEL
-from .domain.models import (
+from ..config import AGENT_CWD, ANTHROPIC_MODEL
+from ..domain.models import (
     ModelInfoEvent,
     ResultEvent,
     SDKEvent,
