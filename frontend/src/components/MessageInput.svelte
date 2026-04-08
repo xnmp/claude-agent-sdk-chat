@@ -4,11 +4,13 @@
 	let {
 		isStreaming,
 		disabled,
+		suggestions = [],
 		onSend,
 		onInterrupt
 	}: {
 		isStreaming: boolean;
 		disabled: boolean;
+		suggestions?: string[];
 		onSend: (content: string, files: File[]) => void;
 		onInterrupt: () => void;
 	} = $props();
@@ -16,6 +18,7 @@
 	let input = $state('');
 	let attachedFiles = $state<File[]>([]);
 	let fileInput: HTMLInputElement | undefined = $state();
+	let showSuggestions = $state(true);
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
@@ -53,6 +56,26 @@
 </script>
 
 <div class="input-area">
+	{#if suggestions.length > 0 && !isStreaming}
+		<div class="suggestions-section">
+			<button class="suggestions-toggle" onclick={() => (showSuggestions = !showSuggestions)}>
+				<svg class="toggle-chevron" class:open={showSuggestions} width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+					<polyline points="3,1.5 7,5 3,8.5" />
+				</svg>
+				Suggestions
+			</button>
+			{#if showSuggestions}
+				<div class="suggestions-chips">
+					{#each suggestions as question}
+						<button class="suggestion-chip" onclick={() => { onSend(question, []); showSuggestions = false; }}>
+							{question}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	{#if attachedFiles.length > 0}
 		<div class="attached-files">
 			{#each attachedFiles as file, i}
@@ -127,6 +150,58 @@
 		max-width: 768px;
 		margin: 0 auto;
 		width: 100%;
+	}
+
+	.suggestions-section {
+		margin-bottom: 6px;
+	}
+
+	.suggestions-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		color: var(--text-dim);
+		padding: 2px 0;
+		letter-spacing: 0.02em;
+	}
+
+	.suggestions-toggle:hover {
+		color: var(--text-secondary);
+	}
+
+	.toggle-chevron {
+		transition: transform 0.15s ease;
+	}
+
+	.toggle-chevron.open {
+		transform: rotate(90deg);
+	}
+
+	.suggestions-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-top: 4px;
+	}
+
+	.suggestion-chip {
+		padding: 4px 10px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		font-size: 0.6875rem;
+		color: var(--text-secondary);
+		transition: all 0.12s ease;
+		text-align: left;
+		line-height: 1.3;
+	}
+
+	.suggestion-chip:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-subtle);
 	}
 
 	.attached-files {

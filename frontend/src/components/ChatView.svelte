@@ -14,8 +14,7 @@
 		settings,
 		suggestions = [],
 		onSend,
-		onInterrupt,
-		onSuggestionClick
+		onInterrupt
 	}: {
 		messages: Message[];
 		liveTurn: LiveTurn | null;
@@ -25,7 +24,6 @@
 		suggestions?: string[];
 		onSend: (content: string, files: File[]) => void;
 		onInterrupt: () => void;
-		onSuggestionClick?: (question: string) => void;
 	} = $props();
 
 	let scrollContainer: HTMLDivElement | undefined = $state();
@@ -73,22 +71,13 @@
 				{#if liveTurn}
 					<TurnBubble {liveTurn} isLive={true} {settings} />
 				{/if}
-
-				{#if suggestions.length > 0 && !isStreaming}
-					<div class="suggestions">
-						{#each suggestions as question}
-							<button class="suggestion-chip" onclick={() => onSuggestionClick?.(question)}>
-								{question}
-							</button>
-						{/each}
-					</div>
-				{/if}
 			</div>
 		</div>
 
 		<MessageInput
 			{isStreaming}
 			disabled={wsStatus !== 'connected'}
+			{suggestions}
 			{onSend}
 			{onInterrupt}
 		/>
@@ -148,28 +137,4 @@
 		color: var(--text-muted);
 	}
 
-	.suggestions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		padding: 12px 0;
-	}
-
-	.suggestion-chip {
-		padding: 8px 14px;
-		background: var(--bg-surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		font-size: 0.8125rem;
-		color: var(--text-secondary);
-		transition: all 0.15s ease;
-		text-align: left;
-		line-height: 1.4;
-	}
-
-	.suggestion-chip:hover {
-		border-color: var(--accent);
-		color: var(--accent);
-		background: var(--accent-subtle);
-	}
 </style>
