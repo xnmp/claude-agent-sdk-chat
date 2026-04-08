@@ -184,6 +184,10 @@ class AssistantTurn:
                 self.duration_ms = d
                 self.total_cost_usd = c
 
+    def has_content(self) -> bool:
+        """True if the turn has accumulated any meaningful content."""
+        return bool(self.text or self.thinking or self.tool_calls)
+
     def to_content(self) -> AssistantMessageContent:
         return AssistantMessageContent(
             thinking=self.thinking,

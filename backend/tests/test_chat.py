@@ -281,3 +281,82 @@ class TestChatSessionCleanup:
         await session.cleanup()
 
         assert len(factory._removed) == 1
+
+
+class TestChatSessionDisconnect:
+    async def _make_session(self, conv_repo, msg_repo, sdk_factory):
+        conv = await conv_repo.create()
+        session = ChatSession(
+            conversation_id=conv.id,
+            conversations=conv_repo,
+            messages=msg_repo,
+            sdk_factory=sdk_factory,
+        )
+        await session.initialize()
+        return session
+
+    async def test_persists_partial_turn_on_early_disconnect(
+        self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,
+    ):
+        """If consumer stops iterating before ResultEvent, save_pending_turn persists it."""
+        client = FakeSDKClient(events=[
+            TextEvent(text="partial answer", message_id="m1"),
+            ToolUseEvent(id="t1", name="Read", input={}, message_id="m1"),
+            ResultEvent(session_id="s1", duration_ms=100, total_cost_usd=0.01, num_turns=1, is_error=False),
+        ])
+        factory = FakeSDKClientFactory(client)
+        session = await self._make_session(conv_repo, msg_repo, factory)
+
+        # Only consume the first event then break (simulating disconnect)
+        async for _event in session.handle_user_message("hello"):
+            break
+
+        # Call save_pending_turn like the WS handler's finally block would
+        await session.save_pending_turn()
+
+        msgs = await msg_repo.list(session.conversation_id)
+        assistant_msgs = [m for m in msgs if m.role == MessageRole.ASSISTANT]
+        assert len(assistant_msgs) == 1
+        content: AssistantMessageContent = assistant_msgs[0].content  # type: ignore[assignment]
+        assert content["text"] == "partial answer"
+
+    async def test_save_pending_turn_noop_if_already_persisted(
+        self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,
+    ):
+        """save_pending_turn is safe to call after a normal completion."""
+        client = FakeSDKClient(events=[
+            TextEvent(text="done", message_id="m1"),
+            ResultEvent(session_id="s1", duration_ms=10, total_cost_usd=0.0, num_turns=1, is_error=False),
+        ])
+        factory = FakeSDKClientFactory(client)
+        session = await self._make_session(conv_repo, msg_repo, factory)
+        await _collect_events(session, "hello")
+
+        # Calling again should not duplicate
+        await session.save_pending_turn()
+
+        msgs = await msg_repo.list(session.conversation_id)
+        assistant_msgs = [m for m in msgs if m.role == MessageRole.ASSISTANT]
+        assert len(assistant_msgs) == 1
+
+    async def test_no_persistence_if_turn_is_empty(
+        self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,
+    ):
+        """If consumer disconnects before any content, nothing is persisted."""
+        client = FakeSDKClient(events=[
+            ModelInfoEvent(model="claude-sonnet-4-20250514", usage={}),
+            TextEvent(text="hello", message_id="m1"),
+            ResultEvent(session_id="s1", duration_ms=10, total_cost_usd=0.0, num_turns=1, is_error=False),
+        ])
+        factory = FakeSDKClientFactory(client)
+        session = await self._make_session(conv_repo, msg_repo, factory)
+
+        # Break immediately — only ModelInfoEvent consumed, no text/tools yet
+        async for _event in session.handle_user_message("hello"):
+            break
+
+        await session.save_pending_turn()
+
+        msgs = await msg_repo.list(session.conversation_id)
+        assistant_msgs = [m for m in msgs if m.role == MessageRole.ASSISTANT]
+        assert len(assistant_msgs) == 0

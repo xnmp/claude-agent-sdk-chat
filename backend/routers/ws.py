@@ -70,4 +70,5 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
     except Exception:
         logger.error("WebSocket error: %s", traceback.format_exc())
     finally:
+        await session.save_pending_turn()
         await session.cleanup()

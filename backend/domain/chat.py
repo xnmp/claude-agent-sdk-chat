@@ -44,6 +44,9 @@ class ChatSession:
         self._client: SDKClient | None = None
         self._sdk_session_id: str | None = None
         self._cumulative_cost: float = 0.0
+        self._pending_turn: AssistantTurn | None = None
+        self._pending_content: str | None = None
+        self._turn_persisted: bool = False
 
     async def initialize(self) -> None:
         """Load conversation and set the SDK session ID. Call once before handling messages."""
@@ -69,6 +72,10 @@ class ChatSession:
         await self._client.query(content)
 
         turn = AssistantTurn()
+        self._pending_turn = turn
+        self._pending_content = content
+        self._turn_persisted = False
+
         async for event in self._client.receive_response():
             # SDK reports cumulative session cost; convert to per-message
             if isinstance(event, ResultEvent):
@@ -86,12 +93,34 @@ class ChatSession:
             yield event
 
             if isinstance(event, ResultEvent):
-                await self._messages.save(
-                    conversation_id=self.conversation_id,
-                    role=MessageRole.ASSISTANT,
-                    content=turn.to_content(),
-                )
-                await self._auto_title(content)
+                await self._persist_turn(turn, content)
+                self._turn_persisted = True
+
+    async def _persist_turn(self, turn: AssistantTurn, first_content: str) -> None:
+        await self._messages.save(
+            conversation_id=self.conversation_id,
+            role=MessageRole.ASSISTANT,
+            content=turn.to_content(),
+        )
+        await self._auto_title(first_content)
+
+    async def save_pending_turn(self) -> None:
+        """Persist any unsaved turn (e.g., after early disconnect).
+
+        Call from the transport layer's cleanup/finally block.
+        Safe to call multiple times — no-ops if already persisted or empty.
+        """
+        if (
+            not self._turn_persisted
+            and self._pending_turn is not None
+            and self._pending_turn.has_content()
+            and self._pending_content is not None
+        ):
+            try:
+                await self._persist_turn(self._pending_turn, self._pending_content)
+                self._turn_persisted = True
+            except Exception:
+                logger.error("Failed to persist partial turn on disconnect")
 
     async def handle_interrupt(self) -> None:
         if self._client:
