@@ -64,6 +64,14 @@ def _build_agent_env() -> dict[str, str]:
 
     env: dict[str, str] = {}
 
+    # Set UV cache to a writable location (sandbox may make ~/.cache read-only)
+    uv_cache = os.path.join(AGENT_CWD, ".uv-cache")
+    os.makedirs(uv_cache, exist_ok=True)
+    env["UV_CACHE_DIR"] = uv_cache
+
+    # Suppress GNOME keyring "secret-tool" errors in sandbox
+    env["DBUS_SESSION_BUS_ADDRESS"] = ""
+
     # Blank out non-API secrets regardless
     for var in _SECRET_VARS - {"ANTHROPIC_API_KEY"}:
         env[var] = ""

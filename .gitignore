@@ -26,3 +26,4 @@ test-results/
 output/
 output_scripts/
 uploads/
+.uv-cache/
