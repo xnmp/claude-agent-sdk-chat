@@ -50,7 +50,7 @@ def translate_event(event: SDKEvent) -> list[WSEvent]:
         case ModelInfoEvent():
             return []
 
-        case ResultEvent(session_id=sid, duration_ms=d, total_cost_usd=c, num_turns=n, is_error=e):
+        case ResultEvent(session_id=sid, duration_ms=d, total_cost_usd=c, num_turns=n, is_error=e, created_files=f):
             return [ResultWS(
                 type="result",
                 session_id=sid,
@@ -58,4 +58,5 @@ def translate_event(event: SDKEvent) -> list[WSEvent]:
                 total_cost_usd=c,
                 num_turns=n,
                 is_error=e,
+                created_files=f,
             )]

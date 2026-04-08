@@ -45,6 +45,7 @@ class ResultWS(TypedDict):
     total_cost_usd: float
     num_turns: int
     is_error: bool
+    created_files: list[str]
 
 
 class ErrorWS(TypedDict):

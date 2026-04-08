@@ -144,6 +144,25 @@
 					{/if}
 				</div>
 			{/if}
+
+			{#if assistantContent.created_files && assistantContent.created_files.length > 0}
+				<div class="created-files">
+					<span class="files-label">Files:</span>
+					{#each assistantContent.created_files as file}
+						<a
+							class="file-link"
+							href="http://localhost:8000/api/output/{file}"
+							download={file.split('/').pop()}
+							target="_blank"
+						>
+							<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M6 2v6M3 6l3 3 3-3M2 10h8" />
+							</svg>
+							{file}
+						</a>
+					{/each}
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -327,6 +346,42 @@
 
 	.meta-sep {
 		color: var(--border-strong);
+	}
+
+	/* Download links */
+	.created-files {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		margin-top: 8px;
+		padding-top: 8px;
+		border-top: 1px solid var(--border);
+		font-size: 0.75rem;
+	}
+
+	.files-label {
+		color: var(--text-dim);
+		font-weight: 500;
+	}
+
+	.file-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 8px;
+		background: var(--accent-subtle);
+		color: var(--accent);
+		border-radius: var(--radius-sm);
+		font-family: var(--font-mono);
+		font-size: 0.6875rem;
+		text-decoration: none;
+		transition: background 0.12s ease;
+	}
+
+	.file-link:hover {
+		background: var(--accent-muted);
+		text-decoration: none;
 	}
 
 	/* Streaming indicator */

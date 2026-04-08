@@ -137,6 +137,7 @@ class ResultEvent:
     total_cost_usd: float
     num_turns: int
     is_error: bool
+    created_files: list[str] = field(default_factory=list)
 
 
 SDKEvent = ThinkingEvent | ToolUseEvent | ToolResultEvent | TextEvent | ModelInfoEvent | ResultEvent

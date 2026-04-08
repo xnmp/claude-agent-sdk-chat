@@ -139,7 +139,8 @@
 							model: '',
 							usage: {},
 							duration_ms: msg.duration_ms,
-							total_cost_usd: msg.total_cost_usd ?? 0
+							total_cost_usd: msg.total_cost_usd ?? 0,
+							created_files: msg.created_files ?? []
 						} satisfies AssistantContent,
 						created_at: new Date().toISOString()
 					};

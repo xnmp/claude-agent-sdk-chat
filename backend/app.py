@@ -1,10 +1,12 @@
 """FastAPI application — wires concrete implementations to port interfaces."""
 
+import os
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import CORS_ORIGINS, validate_config
 from .infra.db import (
@@ -48,6 +50,11 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(conversations.router)
 app.include_router(ws.router)
+
+# Serve output files for download
+_output_dir = os.path.join(os.environ.get("AGENT_CWD", os.getcwd()), "output")
+os.makedirs(_output_dir, exist_ok=True)
+app.mount("/api/output", StaticFiles(directory=_output_dir), name="output")
 
 
 @app.get("/api/health")
