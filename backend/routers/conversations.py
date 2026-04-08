@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ..domain.ports import AppState
-from ..serializers import serialize_conversation, serialize_message
+from .utils.serializers import serialize_conversation, serialize_message
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
