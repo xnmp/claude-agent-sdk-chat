@@ -49,11 +49,16 @@ class ChatSession:
         self._turn_persisted: bool = False
 
     async def initialize(self) -> None:
-        """Load conversation and set the SDK session ID. Call once before handling messages."""
+        """Load conversation, set the SDK session ID, and eagerly connect the SDK client.
+
+        Call once when a conversation is selected (e.g., on WebSocket open).
+        This eliminates cold-start latency on the first message.
+        """
         conv = await self._conversations.get(self.conversation_id)
         if conv is None:
             raise ConversationNotFoundError(self.conversation_id)
         self._sdk_session_id = conv.sdk_session_id
+        self._client = await self._ensure_sdk_client()
 
     async def handle_user_message(self, content: str) -> AsyncIterator[SDKEvent]:
         """Process a user message and yield domain events."""
@@ -64,7 +69,7 @@ class ChatSession:
             content=UserMessageContent(text=content),
         )
 
-        # Lazily create SDK client
+        # Client should already be connected from initialize(), but guard just in case
         if self._client is None:
             self._client = await self._ensure_sdk_client()
 
