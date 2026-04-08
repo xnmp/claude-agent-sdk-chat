@@ -203,17 +203,21 @@ class PgMessageRepository:
         role: MessageRole,
         content: MessageContent,
     ) -> Message:
+        # Extract cost from assistant content for the dedicated column
+        cost_usd = content.get("total_cost_usd", 0) if role == MessageRole.ASSISTANT else 0
+
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 row = await conn.fetchrow(
                     """
-                    INSERT INTO messages (conversation_id, role, content)
-                    VALUES ($1, $2, $3::jsonb)
+                    INSERT INTO messages (conversation_id, role, content, cost_usd)
+                    VALUES ($1, $2, $3::jsonb, $4)
                     RETURNING id, conversation_id, role, content, created_at
                     """,
                     conversation_id,
                     role.value,
                     json.dumps(content),
+                    cost_usd,
                 )
                 await conn.execute(
                     "UPDATE conversations SET updated_at = NOW() WHERE id = $1",
