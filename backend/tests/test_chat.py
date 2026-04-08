@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import pytest
 
 from backend.domain.chat import ChatSession, ConversationNotFoundError
@@ -132,7 +135,7 @@ class TestChatSessionHandleMessage:
         assert conv is not None
         assert conv.title == "What is the meaning of life?"
 
-    async def test_creates_sdk_client_lazily_on_first_message(
+    async def test_connects_sdk_client_eagerly_on_initialize(
         self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,
     ):
         client = FakeSDKClient(events=[
@@ -141,9 +144,9 @@ class TestChatSessionHandleMessage:
         factory = FakeSDKClientFactory(client)
         session = await self._make_session(conv_repo, msg_repo, factory)
 
-        assert not client.connected
-        await _collect_events(session, "hi")
+        # Client should already be connected after initialize()
         assert client.connected
+        await _collect_events(session, "hi")
         assert client.queries == ["hi"]
 
     async def test_assigns_sdk_session_id_on_first_message(
@@ -360,3 +363,46 @@ class TestChatSessionDisconnect:
         msgs = await msg_repo.list(session.conversation_id)
         assistant_msgs = [m for m in msgs if m.role == MessageRole.ASSISTANT]
         assert len(assistant_msgs) == 0
+
+
+class TestEagerConnect:
+    """Verify that SDK connect latency is paid during initialize(), not handle_user_message()."""
+
+    async def test_connect_latency_is_in_initialize_not_message(
+        self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,
+    ):
+        connect_delay = 0.05  # 50ms simulated connect latency
+
+        class SlowConnectClient(FakeSDKClient):
+            async def connect(self) -> None:
+                await asyncio.sleep(connect_delay)
+                await super().connect()
+
+        client = SlowConnectClient(events=[
+            TextEvent(text="hi", message_id="m1"),
+            ResultEvent(session_id="s1", duration_ms=10, total_cost_usd=0.0, num_turns=1, is_error=False),
+        ])
+        factory = FakeSDKClientFactory(client)
+
+        conv = await conv_repo.create()
+        session = ChatSession(
+            conversation_id=conv.id,
+            conversations=conv_repo,
+            messages=msg_repo,
+            sdk_factory=factory,
+        )
+
+        # initialize() should pay the connect cost
+        t0 = time.monotonic()
+        await session.initialize()
+        init_time = time.monotonic() - t0
+
+        assert client.connected
+        assert init_time >= connect_delay * 0.8  # allow some tolerance
+
+        # handle_user_message() should NOT pay connect cost again
+        t0 = time.monotonic()
+        await _collect_events(session, "hello")
+        msg_time = time.monotonic() - t0
+
+        assert msg_time < connect_delay * 0.5  # should be much faster
