@@ -37,6 +37,7 @@ export interface AssistantContent {
 	usage: Record<string, number>;
 	duration_ms: number;
 	total_cost_usd: number;
+	created_files: string[];
 }
 
 export interface Message {
@@ -61,6 +62,7 @@ export type WsMessage =
 			total_cost_usd: number | null;
 			num_turns: number;
 			is_error: boolean;
+			created_files: string[];
 		}
 	| { type: 'error'; message: string };
 

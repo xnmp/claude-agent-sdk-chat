@@ -92,6 +92,7 @@ class ChatSession:
                     total_cost_usd=per_message_cost,
                     num_turns=event.num_turns,
                     is_error=event.is_error,
+                    created_files=event.created_files,
                 )
 
             turn.process(event)

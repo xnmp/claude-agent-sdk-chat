@@ -102,7 +102,8 @@ describe('processWsMessage', () => {
 			duration_ms: 100,
 			total_cost_usd: 0.01,
 			num_turns: 1,
-			is_error: false
+			is_error: false,
+			created_files: []
 		};
 		const action = processWsMessage(msg, turn);
 

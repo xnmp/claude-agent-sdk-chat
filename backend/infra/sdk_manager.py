@@ -21,7 +21,10 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
+import os
+
 from ..config import AGENT_CWD, ANTHROPIC_MODEL
+from .hooks import make_hooks
 from ..domain.models import (
     ModelInfoEvent,
     ResultEvent,
@@ -36,8 +39,9 @@ from ..domain.models import (
 class ClaudeSDKClientAdapter:
     """Wraps ClaudeSDKClient, translating SDK messages into domain events."""
 
-    def __init__(self, client: ClaudeSDKClient) -> None:
+    def __init__(self, client: ClaudeSDKClient, created_files: set[str] | None = None) -> None:
         self._client = client
+        self.created_files: set[str] = created_files or set()
 
     async def connect(self) -> None:
         await self._client.connect()
@@ -50,6 +54,12 @@ class ClaudeSDKClientAdapter:
 
     async def disconnect(self) -> None:
         await self._client.disconnect()
+
+    def pop_created_files(self) -> list[str]:
+        """Return and clear the list of files created during the last turn."""
+        files = sorted(self.created_files)
+        self.created_files.clear()
+        return files
 
     async def receive_response(self) -> AsyncIterator[SDKEvent]:
         async for msg in self._client.receive_response():
@@ -66,6 +76,7 @@ class ClaudeSDKClientAdapter:
                     total_cost_usd=msg.total_cost_usd or 0.0,
                     num_turns=msg.num_turns,
                     is_error=msg.is_error,
+                    created_files=self.pop_created_files(),
                 )
 
 
@@ -138,6 +149,10 @@ class SDKManager:
             self._last_access[session_id] = _now()
             return self._clients[session_id]
 
+        output_dir = os.path.join(AGENT_CWD, "output")
+        os.makedirs(output_dir, exist_ok=True)
+        hook_config = make_hooks(output_dir)
+
         options = ClaudeAgentOptions(
             allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Write", "Skill"],
             permission_mode="acceptEdits",
@@ -148,6 +163,7 @@ class SDKManager:
                 "enabled": True,
                 "autoAllowBashIfSandboxed": True,
             },
+            hooks=hook_config["hooks"],
         )
         if resume:
             options.resume = session_id
@@ -155,7 +171,7 @@ class SDKManager:
             options.session_id = session_id
 
         client = ClaudeSDKClient(options=options)
-        adapter = ClaudeSDKClientAdapter(client)
+        adapter = ClaudeSDKClientAdapter(client, hook_config["created_files"])
         self._clients[session_id] = adapter
         self._last_access[session_id] = _now()
         return adapter
