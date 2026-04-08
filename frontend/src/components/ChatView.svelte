@@ -34,7 +34,10 @@
 
 		tick().then(() => {
 			if (scrollContainer) {
-				scrollContainer.scrollTop = scrollContainer.scrollHeight;
+				scrollContainer.scrollTo({
+					top: scrollContainer.scrollHeight,
+					behavior: 'smooth'
+				});
 			}
 		});
 	});
