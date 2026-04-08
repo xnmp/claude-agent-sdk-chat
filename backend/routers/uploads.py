@@ -36,9 +36,9 @@ def get_attachment(attachment_id: str) -> tuple[FileMetadata, PromptAttachment] 
 def _extract_pdf_text(path: str) -> str | None:
     try:
         doc = fitz.open(path)
-        pages = []
+        pages: list[str] = []
         for page in doc:
-            pages.append(page.get_text())
+            pages.append(str(page.get_text()))
         doc.close()
         return "\n\n".join(pages)
     except Exception:
