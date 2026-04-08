@@ -32,6 +32,9 @@ AUTH_PROXY_PORT = int(os.environ.get("AUTH_PROXY_PORT", "9100"))
 # Defaults to claude-sonnet-4-5-20250514 (the CLI default when omitted).
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "")
 
+# Smaller/faster model for background tasks (title generation, follow-up suggestions)
+ANTHROPIC_SMALL_FAST_MODEL = os.environ.get("ANTHROPIC_SMALL_FAST_MODEL", "claude-haiku-4-5-20251001")
+
 _WARNED_VARS = {
     "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
 }

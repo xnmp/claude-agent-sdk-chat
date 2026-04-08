@@ -18,6 +18,7 @@
 	let liveTurn = $state<LiveTurn | null>(null);
 	let wsClient = $state<WsClient | null>(null);
 	let wsStatus = $state<WsStatus>('disconnected');
+	let suggestions = $state<string[]>([]);
 
 	onMount(() => {
 		applyTheme(settings.theme);
@@ -134,6 +135,18 @@
 	}
 
 	function handleWsMessage(msg: WsMessage) {
+		// Handle background task results (arrive after turn completes)
+		if (msg.type === 'suggestions') {
+			suggestions = msg.questions;
+			return;
+		}
+		if (msg.type === 'title_update') {
+			conversations = conversations.map((c) =>
+				c.id === activeConversationId ? { ...c, title: msg.title } : c
+			);
+			return;
+		}
+
 		const action = processWsMessage(msg, liveTurn);
 
 		switch (action.kind) {
@@ -163,12 +176,14 @@
 				}
 				liveTurn = null;
 				isStreaming = false;
+				suggestions = [];
 				loadConversations();
 				break;
 
 			case 'error':
 				isStreaming = false;
 				liveTurn = null;
+				suggestions = [];
 				break;
 		}
 	}
@@ -193,8 +208,10 @@
 		{isStreaming}
 		{wsStatus}
 		{settings}
+		{suggestions}
 		onSend={handleSendMessage}
 		onInterrupt={handleInterrupt}
+		onSuggestionClick={(q) => handleSendMessage(q)}
 	/>
 {:else}
 	<Login onLogin={handleLogin} />
