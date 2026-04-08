@@ -44,6 +44,7 @@ class ChatSession:
         self._sdk_factory = sdk_factory
         self._client: SDKClient | None = None
         self._sdk_session_id: str | None = None
+        self._cumulative_cost: float = 0.0
 
     async def initialize(self) -> None:
         """Load conversation and set the SDK session ID. Call once before handling messages."""
@@ -70,6 +71,18 @@ class ChatSession:
 
         turn = AssistantTurn()
         async for event in self._client.receive_response():
+            # SDK reports cumulative session cost; convert to per-message
+            if isinstance(event, ResultEvent):
+                per_message_cost = event.total_cost_usd - self._cumulative_cost
+                self._cumulative_cost = event.total_cost_usd
+                event = ResultEvent(
+                    session_id=event.session_id,
+                    duration_ms=event.duration_ms,
+                    total_cost_usd=per_message_cost,
+                    num_turns=event.num_turns,
+                    is_error=event.is_error,
+                )
+
             turn.process(event)
 
             for ws_event in translate_event(event):
