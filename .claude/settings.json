@@ -57,6 +57,11 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/suggestions/svelte_effect_reminder.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/linting/pyrefly_check_edited_py_file.sh",
+            "timeout": 30000
           }
         ]
       }
