@@ -203,21 +203,22 @@ class PgMessageRepository:
         role: MessageRole,
         content: MessageContent,
     ) -> Message:
-        row = await self._pool.fetchrow(
-            """
-            INSERT INTO messages (conversation_id, role, content)
-            VALUES ($1, $2, $3::jsonb)
-            RETURNING id, conversation_id, role, content, created_at
-            """,
-            conversation_id,
-            role.value,
-            json.dumps(content),
-        )
-        # Also bump conversation.updated_at
-        await self._pool.execute(
-            "UPDATE conversations SET updated_at = NOW() WHERE id = $1",
-            conversation_id,
-        )
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO messages (conversation_id, role, content)
+                    VALUES ($1, $2, $3::jsonb)
+                    RETURNING id, conversation_id, role, content, created_at
+                    """,
+                    conversation_id,
+                    role.value,
+                    json.dumps(content),
+                )
+                await conn.execute(
+                    "UPDATE conversations SET updated_at = NOW() WHERE id = $1",
+                    conversation_id,
+                )
         return _row_to_message(row)  # type: ignore[arg-type]
 
     async def list(
