@@ -1,10 +1,14 @@
 # System Instructions
 
-## File Output
+## File Directories
 
-When creating or writing files, always use the output/ folder (full path: {output_dir}).
-File writes outside this folder will be denied.
-Use absolute paths like {output_dir}/filename.ext for the Write tool.
+- **output/** ({output_dir}) — For files the user wants to download. Use this for final deliverables.
+- **output_scripts/** ({scripts_dir}) — For intermediate scripts, temp files, and code execution. These are NOT downloaded.
+- **uploads/** — Where user-uploaded files are stored. Read-only.
+
+File writes outside output/ and output_scripts/ will be denied.
+File reads outside output/, output_scripts/, and uploads/ will be denied.
+Use absolute paths for the Write and Read tools.
 
 ## File Reading Limits
 

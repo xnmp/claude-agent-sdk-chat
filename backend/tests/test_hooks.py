@@ -18,8 +18,22 @@ def output_dir(tmp_path):
 
 
 @pytest.fixture
-def hook_config(output_dir):
-    return make_hooks(output_dir)
+def scripts_dir(tmp_path):
+    d = tmp_path / "output_scripts"
+    d.mkdir()
+    return str(d)
+
+
+@pytest.fixture
+def uploads_dir(tmp_path):
+    d = tmp_path / "uploads"
+    d.mkdir()
+    return str(d)
+
+
+@pytest.fixture
+def hook_config(output_dir, scripts_dir, uploads_dir):
+    return make_hooks(output_dir, scripts_dir, uploads_dir)
 
 
 class TestEnforceOutputDir:
@@ -159,11 +173,35 @@ class TestTrackCreatedFiles:
         assert "shared.txt" in created_files
 
 
+class TestEnforceReadDirs:
+    @pytest.fixture
+    def read_dir_hook(self, hook_config):
+        return hook_config["hooks"]["PreToolUse"][1].hooks[0]
+
+    async def test_allows_read_from_output(self, read_dir_hook, output_dir):
+        f = os.path.join(output_dir, "test.txt")
+        with open(f, "w") as fh:
+            fh.write("hi")
+        result = await read_dir_hook({"tool_input": {"file_path": f}}, "tu-1", {"signal": None})
+        assert result == {}
+
+    async def test_allows_read_from_uploads(self, read_dir_hook, uploads_dir):
+        f = os.path.join(uploads_dir, "data.csv")
+        with open(f, "w") as fh:
+            fh.write("a,b")
+        result = await read_dir_hook({"tool_input": {"file_path": f}}, "tu-1", {"signal": None})
+        assert result == {}
+
+    async def test_blocks_read_from_outside(self, read_dir_hook):
+        result = await read_dir_hook({"tool_input": {"file_path": "/etc/passwd"}}, "tu-1", {"signal": None})
+        assert result.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+
+
 class TestLimitReadSize:
     @pytest.fixture
     def read_hook(self, hook_config):
-        # Second PreToolUse matcher is Read
-        return hook_config["hooks"]["PreToolUse"][1].hooks[0]
+        # Second hook in Read matcher is limit_read_size
+        return hook_config["hooks"]["PreToolUse"][1].hooks[1]
 
     async def test_allows_small_file(self, read_hook, output_dir):
         small = os.path.join(output_dir, "small.txt")

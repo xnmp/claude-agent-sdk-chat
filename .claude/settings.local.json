@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show:*)",
+      "Bash(npm list:*)",
+      "Bash(npm show:*)",
+      "Bash(docker exec:*)",
+      "Bash(npx --yes sv@latest create frontend --template minimal --types ts --no-add-ons --no-install)",
+      "Bash(bun install:*)",
+      "Bash(chmod +x:*)",
+      "Bash(uv run:*)",
+      "Bash(bun run:*)",
+      "Bash(npx svelte-check:*)",
+      "Bash(curl -s http://localhost:8000/api/health)",
+      "Bash(curl -s http://localhost:8000/api/conversations)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:8000/api/conversations -H 'Content-Type: application/json' -d '{\"title\":\"Test conv\"}')",
+      "Bash(curl -s -X DELETE http://localhost:8000/api/conversations/8aba7c55-24ea-4501-bd7b-b440915eedaf)",
+      "Bash(kill %1)",
+      "Bash(grep:*)",
+      "Bash(gh issue:*)",
+      "Bash(git checkout:*)",
+      "Bash(xargs ls:*)",
+      "Bash(uv add:*)",
+      "Bash(npx playwright:*)",
+      "Bash(curl:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Read(//home/chong/.local/share/claude/versions/**)"
+    ]
+  },
+  "enabledPlugins": {
+    "gh-issues@local": true
+  }
+}

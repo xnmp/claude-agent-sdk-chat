@@ -79,9 +79,9 @@ def _build_agent_env() -> dict[str, str]:
     return env
 
 
-def _load_system_prompt(output_dir: str) -> str:
+def _load_system_prompt(output_dir: str, scripts_dir: str) -> str:
     template = (_PROMPTS_DIR / "system.md").read_text()
-    return template.replace("{output_dir}", output_dir)
+    return template.replace("{output_dir}", output_dir).replace("{scripts_dir}", scripts_dir)
 from ..domain.models import (
     ModelInfoEvent,
     ResultEvent,
@@ -207,15 +207,18 @@ class SDKManager:
             return self._clients[session_id]
 
         output_dir = os.path.join(AGENT_CWD, "output")
-        os.makedirs(output_dir, exist_ok=True)
-        hook_config = make_hooks(output_dir)
+        scripts_dir = os.path.join(AGENT_CWD, "output_scripts")
+        uploads_dir = os.path.join(AGENT_CWD, "uploads")
+        for d in [output_dir, scripts_dir, uploads_dir]:
+            os.makedirs(d, exist_ok=True)
+        hook_config = make_hooks(output_dir, scripts_dir, uploads_dir)
 
         options = ClaudeAgentOptions(
             allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Write", "Skill"],
             permission_mode="acceptEdits",
             cwd=AGENT_CWD,
             model=ANTHROPIC_MODEL or None,
-            system_prompt=_load_system_prompt(output_dir),
+            system_prompt=_load_system_prompt(output_dir, scripts_dir),
             setting_sources=["user", "project"],
             sandbox={
                 "enabled": True,
