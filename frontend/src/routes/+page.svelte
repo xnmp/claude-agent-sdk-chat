@@ -59,7 +59,18 @@
 	async function selectConversation(id: string) {
 		if (activeConversationId === id) return;
 
-		wsClient?.disconnect();
+		if (isStreaming && wsClient) {
+			// Response still generating — let the old WS finish in the background.
+			// Detach the message handler so events don't update the wrong conversation.
+			// The server will persist the turn when it completes.
+			const orphan = wsClient;
+			orphan.setOnStatusChange(() => {});
+			orphan.setOnDisconnect(() => {});
+			// Don't disconnect — let it run until the server finishes
+		} else {
+			wsClient?.disconnect();
+		}
+
 		wsClient = null;
 		liveTurn = null;
 		isStreaming = false;
@@ -68,10 +79,19 @@
 		activeConversationId = id;
 		messages = await getMessages(id);
 
+		// If the last message is from the user, a response may still be
+		// generating in the background. Show streaming indicator and poll
+		// for the completed response.
+		const lastMsg = messages[messages.length - 1];
+		if (lastMsg && lastMsg.role === 'user') {
+			liveTurn = { thinking: [], tool_calls: [], text: '' };
+			isStreaming = true;
+			_pollForResponse(id);
+		}
+
 		const client = createWsClient(id, handleWsMessage);
 		client.setOnStatusChange((s) => (wsStatus = s));
 		client.setOnDisconnect(() => {
-			// Reset streaming state on unexpected disconnect
 			if (isStreaming) {
 				isStreaming = false;
 				liveTurn = null;
@@ -129,6 +149,28 @@
 		liveTurn = { thinking: [], tool_calls: [], text: '' };
 
 		wsClient.send(content || `[Attached: ${files.map(f => f.name).join(', ')}]`, attachmentIds);
+	}
+
+	async function _pollForResponse(convId: string) {
+		for (let i = 0; i < 60; i++) {
+			await new Promise((r) => setTimeout(r, 2000));
+			// Stop polling if user switched away or streaming ended
+			if (activeConversationId !== convId || !isStreaming) return;
+			const updated = await getMessages(convId);
+			const last = updated[updated.length - 1];
+			if (last && last.role === 'assistant') {
+				messages = updated;
+				liveTurn = null;
+				isStreaming = false;
+				loadConversations();
+				return;
+			}
+		}
+		// Timeout — clear the indicator
+		if (activeConversationId === convId) {
+			liveTurn = null;
+			isStreaming = false;
+		}
 	}
 
 	function handleInterrupt() {
