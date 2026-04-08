@@ -1,29 +1,32 @@
 <script lang="ts">
-	import type { User } from '$lib/types';
-	import { login } from '$lib/api';
-
-	let { onLogin }: { onLogin: (user: User) => void } = $props();
+	let {
+		onSubmit,
+		error = ''
+	}: {
+		onSubmit: (email: string, displayName?: string) => Promise<void>;
+		error?: string;
+	} = $props();
 
 	let email = $state('');
 	let displayName = $state('');
-	let error = $state('');
 	let loading = $state(false);
+	let localError = $state('');
+
+	let displayError = $derived(error || localError);
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		error = '';
+		localError = '';
 		const trimmedEmail = email.trim();
 		if (!trimmedEmail) {
-			error = 'Email is required';
+			localError = 'Email is required';
 			return;
 		}
 		loading = true;
 		try {
-			const user = await login(trimmedEmail, displayName.trim() || undefined);
-			localStorage.setItem('user', JSON.stringify(user));
-			onLogin(user);
-		} catch {
-			error = 'Login failed. Is the backend running?';
+			await onSubmit(trimmedEmail, displayName.trim() || undefined);
+		} catch (err) {
+			localError = err instanceof Error ? err.message : 'Login failed';
 		} finally {
 			loading = false;
 		}
@@ -48,8 +51,8 @@
 				<input type="text" bind:value={displayName} placeholder="Your name" />
 			</label>
 
-			{#if error}
-				<p class="error">{error}</p>
+			{#if displayError}
+				<p class="error">{displayError}</p>
 			{/if}
 
 			<button type="submit" class="login-btn" disabled={loading}>

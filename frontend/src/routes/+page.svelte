@@ -4,8 +4,9 @@
 	import ChatView from '../components/ChatView.svelte';
 	import Login from '../components/Login.svelte';
 	import type { Conversation, Message, LiveTurn, WsMessage, AssistantContent, User } from '$lib/types';
-	import { listConversations, createConversation, getMessages, deleteConversation } from '$lib/api';
+	import { listConversations, createConversation, getMessages, deleteConversation, login } from '$lib/api';
 	import { createWsClient, type WsClient, type WsStatus } from '$lib/ws';
+	import { processWsMessage } from '$lib/liveTurnReducer';
 
 	let currentUser = $state<User | null>(null);
 	let conversations = $state<Conversation[]>([]);
@@ -24,7 +25,9 @@
 		}
 	});
 
-	function handleLogin(user: User) {
+	async function handleLogin(email: string, displayName?: string) {
+		const user = await login(email, displayName);
+		localStorage.setItem('user', JSON.stringify(user));
 		currentUser = user;
 		loadConversations();
 	}
@@ -100,60 +103,23 @@
 	}
 
 	function handleWsMessage(msg: WsMessage) {
-		if (!liveTurn && msg.type !== 'result' && msg.type !== 'error') {
-			liveTurn = { thinking: [], tool_calls: [], text: '' };
-		}
+		const action = processWsMessage(msg, liveTurn);
 
-		switch (msg.type) {
-			case 'thinking':
-				if (liveTurn) {
-					liveTurn.thinking = [...liveTurn.thinking, { thinking: msg.thinking, signature: '' }];
-				}
+		switch (action.kind) {
+			case 'update':
+				liveTurn = action.turn;
 				break;
 
-			case 'tool_use':
-				if (liveTurn) {
-					liveTurn.tool_calls = [
-						...liveTurn.tool_calls,
-						{ id: msg.id, name: msg.name, input: {}, result: null, is_error: null }
-					];
-				}
-				break;
-
-			case 'tool_input':
-				if (liveTurn) {
-					liveTurn.tool_calls = liveTurn.tool_calls.map((tc) =>
-						tc.id === msg.tool_use_id ? { ...tc, input: msg.input } : tc
-					);
-				}
-				break;
-
-			case 'tool_result':
-				if (liveTurn) {
-					liveTurn.tool_calls = liveTurn.tool_calls.map((tc) =>
-						tc.id === msg.tool_use_id
-							? { ...tc, result: msg.content, is_error: msg.is_error }
-							: tc
-					);
-				}
-				break;
-
-			case 'assistant_text':
-				if (liveTurn) {
-					liveTurn.text = msg.text;
-				}
-				break;
-
-			case 'result': {
-				if (liveTurn) {
+			case 'finalize':
+				if (msg.type === 'result') {
 					const assistantMsg: Message = {
 						id: crypto.randomUUID(),
 						conversation_id: activeConversationId!,
 						role: 'assistant',
 						content: {
-							thinking: liveTurn.thinking,
-							tool_calls: liveTurn.tool_calls,
-							text: liveTurn.text,
+							thinking: action.turn.thinking,
+							tool_calls: action.turn.tool_calls,
+							text: action.turn.text,
 							model: '',
 							usage: {},
 							duration_ms: msg.duration_ms,
@@ -167,7 +133,6 @@
 				isStreaming = false;
 				loadConversations();
 				break;
-			}
 
 			case 'error':
 				isStreaming = false;
@@ -197,5 +162,5 @@
 		onInterrupt={handleInterrupt}
 	/>
 {:else}
-	<Login onLogin={handleLogin} />
+	<Login onSubmit={handleLogin} />
 {/if}
