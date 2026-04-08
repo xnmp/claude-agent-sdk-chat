@@ -27,6 +27,7 @@ function assistantMessage(overrides: Partial<AssistantContent> = {}): Message {
 			usage: {},
 			duration_ms: 1500,
 			total_cost_usd: 0.003,
+			created_files: [],
 			...overrides
 		},
 		created_at: new Date().toISOString()
@@ -122,5 +123,27 @@ describe('TurnBubble', () => {
 		await user.click(screen.getByText(/1 tool call$/));
 		// After expanding, the tool name should be visible inside sub-messages
 		expect(screen.getByText('Read')).toBeInTheDocument();
+	});
+
+	it('renders download links for created files', () => {
+		render(TurnBubble, {
+			props: {
+				message: assistantMessage({
+					created_files: ['report.csv', 'chart.png']
+				})
+			}
+		});
+		const links = screen.getAllByRole('link');
+		expect(links).toHaveLength(2);
+		expect(links[0]).toHaveTextContent('report.csv');
+		expect(links[1]).toHaveTextContent('chart.png');
+		expect(links[0]).toHaveAttribute('href', expect.stringContaining('report.csv'));
+	});
+
+	it('does not render download section when no created files', () => {
+		const { container } = render(TurnBubble, {
+			props: { message: assistantMessage({ created_files: [] }) }
+		});
+		expect(container.querySelector('.created-files')).toBeNull();
 	});
 });
