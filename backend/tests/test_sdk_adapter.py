@@ -151,7 +151,7 @@ class TestTranslateAssistant:
 
     def test_non_string_tool_result_content_converted(self):
         msg = AssistantMessage(
-            content=[ToolResultBlock(tool_use_id="tu-1", content=["chunk1", "chunk2"])],
+            content=[ToolResultBlock(tool_use_id="tu-1", content=["chunk1", "chunk2"])],  # type: ignore[arg-type]
             model="claude-sonnet-4-20250514",
         )
         events = _translate_assistant(msg)
@@ -172,7 +172,8 @@ class TestTranslateUser:
         events = _translate_user(msg)
 
         assert len(events) == 2
-        assert all(isinstance(e, ToolResultEvent) for e in events)
+        assert isinstance(events[0], ToolResultEvent)
+        assert isinstance(events[1], ToolResultEvent)
         assert events[0].tool_use_id == "tu-1"
         assert events[0].is_error is False
         assert events[1].tool_use_id == "tu-2"

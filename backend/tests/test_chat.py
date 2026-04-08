@@ -6,6 +6,7 @@ import pytest
 
 from backend.domain.chat import ChatSession, ConversationNotFoundError
 from backend.domain.models import (
+    AssistantMessageContent,
     MessageRole,
     ModelInfoEvent,
     ResultEvent,
@@ -98,7 +99,7 @@ class TestChatSessionHandleMessage:
         msgs = await msg_repo.list(session.conversation_id)
         assistant_msgs = [m for m in msgs if m.role == MessageRole.ASSISTANT]
         assert len(assistant_msgs) == 1
-        content = assistant_msgs[0].content
+        content: AssistantMessageContent = assistant_msgs[0].content  # type: ignore[assignment]
         assert content["text"] == "The file contains a hello world program."
         assert content["duration_ms"] == 1500
         assert len(content["tool_calls"]) == 1
@@ -195,8 +196,10 @@ class TestChatSessionCost:
         msgs = await msg_repo.list(session.conversation_id)
         assistant_msgs = [m for m in msgs if m.role == MessageRole.ASSISTANT]
         assert len(assistant_msgs) == 2
-        assert assistant_msgs[0].content["total_cost_usd"] == pytest.approx(0.10)
-        assert assistant_msgs[1].content["total_cost_usd"] == pytest.approx(0.03)
+        cost_0: AssistantMessageContent = assistant_msgs[0].content  # type: ignore[assignment]
+        cost_1: AssistantMessageContent = assistant_msgs[1].content  # type: ignore[assignment]
+        assert cost_0["total_cost_usd"] == pytest.approx(0.10)
+        assert cost_1["total_cost_usd"] == pytest.approx(0.03)
 
     async def test_yielded_result_event_has_per_message_cost(
         self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,
