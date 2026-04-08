@@ -23,6 +23,11 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 # Optional base URL override (e.g. for proxies or custom endpoints)
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
 
+# Auth proxy — intercepts agent API calls to inject credentials,
+# so the agent subprocess never sees the real API key.
+AUTH_PROXY_ENABLED = os.environ.get("AUTH_PROXY_ENABLED", "true").lower() in ("true", "1", "yes")
+AUTH_PROXY_PORT = int(os.environ.get("AUTH_PROXY_PORT", "9100"))
+
 # Model to use for the agent. Passed as --model to the CLI.
 # Defaults to claude-sonnet-4-5-20250514 (the CLI default when omitted).
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "")

@@ -25,10 +25,58 @@ import os
 
 from pathlib import Path
 
-from ..config import AGENT_CWD, ANTHROPIC_MODEL
+from ..config import AGENT_CWD, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, AUTH_PROXY_ENABLED, AUTH_PROXY_PORT
 from .hooks import make_hooks
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+
+# Env vars safe to pass through to the agent subprocess.
+_ENV_ALLOWLIST = frozenset({
+    "PATH", "HOME", "LANG", "LC_ALL", "TERM", "USER", "SHELL",
+    "TMPDIR", "TMP", "TEMP", "XDG_RUNTIME_DIR",
+})
+
+# Known secret-bearing vars to explicitly blank.
+# The SDK merges options.env on top of os.environ, so we must
+# override these to prevent inheritance from the parent process.
+_SECRET_VARS = frozenset({
+    "ANTHROPIC_API_KEY", "DATABASE_URL",
+    "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+    "GITHUB_TOKEN", "GH_TOKEN",
+    "OPENAI_API_KEY", "GOOGLE_API_KEY",
+})
+
+
+def _build_agent_env() -> dict[str, str]:
+    """Build a scrubbed environment for the agent subprocess.
+
+    Returns a dict to pass as ClaudeAgentOptions.env. The SDK merges
+    this on top of the inherited os.environ, so we:
+    1. Point ANTHROPIC_BASE_URL to the local auth proxy
+    2. When a key is configured, replace it with a dummy (proxy injects the real one)
+    3. Blank out other known secrets (DATABASE_URL, etc.)
+
+    When no ANTHROPIC_API_KEY is configured, the CLI uses its own stored
+    credentials (OAuth from ~/.claude/), so we don't override it.
+    """
+    if not AUTH_PROXY_ENABLED:
+        return {}
+
+    env: dict[str, str] = {}
+
+    # Blank out non-API secrets regardless
+    for var in _SECRET_VARS - {"ANTHROPIC_API_KEY"}:
+        env[var] = ""
+
+    # Only override the API key when we have a real one to inject via proxy.
+    # Otherwise let the CLI use its own stored credentials.
+    if ANTHROPIC_API_KEY:
+        env["ANTHROPIC_API_KEY"] = "proxy-managed"
+
+    # Point agent to the local auth proxy
+    env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{AUTH_PROXY_PORT}"
+
+    return env
 
 
 def _load_system_prompt(output_dir: str) -> str:
@@ -174,6 +222,7 @@ class SDKManager:
                 "autoAllowBashIfSandboxed": True,
             },
             hooks=hook_config["hooks"],
+            env=_build_agent_env(),
         )
         if resume:
             options.resume = session_id

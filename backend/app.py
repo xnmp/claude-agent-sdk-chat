@@ -8,7 +8,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .config import CORS_ORIGINS, validate_config
+from .config import (
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_BASE_URL,
+    AUTH_PROXY_ENABLED,
+    AUTH_PROXY_PORT,
+    CORS_ORIGINS,
+    validate_config,
+)
+from .infra.auth_proxy import start_proxy, stop_proxy
 from .infra.db import (
     PgConversationRepository,
     PgMessageRepository,
@@ -24,6 +32,11 @@ from .infra.sdk_manager import SDKManager
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     validate_config()
+
+    if AUTH_PROXY_ENABLED:
+        upstream = ANTHROPIC_BASE_URL or "https://api.anthropic.com"
+        await start_proxy(AUTH_PROXY_PORT, ANTHROPIC_API_KEY, upstream)
+
     pool = await init_pool()
 
     app.state.deps = AppState(
@@ -35,6 +48,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
     await close_pool()
+    if AUTH_PROXY_ENABLED:
+        await stop_proxy()
 
 
 app = FastAPI(title="Claude Agent SDK Chat", lifespan=lifespan)
