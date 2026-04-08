@@ -23,8 +23,17 @@ from claude_agent_sdk import (
 
 import os
 
+from pathlib import Path
+
 from ..config import AGENT_CWD, ANTHROPIC_MODEL
 from .hooks import make_hooks
+
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+
+
+def _load_system_prompt(output_dir: str) -> str:
+    template = (_PROMPTS_DIR / "system.md").read_text()
+    return template.replace("{output_dir}", output_dir)
 from ..domain.models import (
     ModelInfoEvent,
     ResultEvent,
@@ -158,11 +167,7 @@ class SDKManager:
             permission_mode="acceptEdits",
             cwd=AGENT_CWD,
             model=ANTHROPIC_MODEL or None,
-            system_prompt=(
-                f"When creating or writing files, always use the output/ folder "
-                f"(full path: {output_dir}/). File writes outside this folder will be denied. "
-                f"Use absolute paths like {output_dir}/filename.ext for the Write tool."
-            ),
+            system_prompt=_load_system_prompt(output_dir),
             setting_sources=["user", "project"],
             sandbox={
                 "enabled": True,

@@ -1,4 +1,4 @@
-"""Unit tests for SDK output folder hooks."""
+"""Unit tests for SDK hooks — output folder, file tracking, read limits."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import tempfile
 
 import pytest
 
-from backend.infra.hooks import make_hooks
+from backend.infra.hooks import MAX_READ_BYTES, make_hooks
 
 
 @pytest.fixture
@@ -157,3 +157,68 @@ class TestTrackCreatedFiles:
         )
         # The set returned by make_hooks is the same one the hook writes to
         assert "shared.txt" in created_files
+
+
+class TestLimitReadSize:
+    @pytest.fixture
+    def read_hook(self, hook_config):
+        # Second PreToolUse matcher is Read
+        return hook_config["hooks"]["PreToolUse"][1].hooks[0]
+
+    async def test_allows_small_file(self, read_hook, output_dir):
+        small = os.path.join(output_dir, "small.txt")
+        with open(small, "w") as f:
+            f.write("hello")
+
+        result = await read_hook(
+            {"tool_input": {"file_path": small}},
+            "tu-1", {"signal": None},
+        )
+        assert result == {}
+
+    async def test_blocks_large_file(self, read_hook, tmp_path):
+        large = str(tmp_path / "large.bin")
+        with open(large, "wb") as f:
+            f.write(b"x" * (MAX_READ_BYTES + 1))
+
+        result = await read_hook(
+            {"tool_input": {"file_path": large}},
+            "tu-1", {"signal": None},
+        )
+        assert result.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+
+    async def test_allows_large_file_with_limit(self, read_hook, tmp_path):
+        large = str(tmp_path / "large.bin")
+        with open(large, "wb") as f:
+            f.write(b"x" * (MAX_READ_BYTES + 1))
+
+        result = await read_hook(
+            {"tool_input": {"file_path": large, "limit": 100}},
+            "tu-1", {"signal": None},
+        )
+        assert result == {}
+
+    async def test_allows_large_file_with_offset(self, read_hook, tmp_path):
+        large = str(tmp_path / "large.bin")
+        with open(large, "wb") as f:
+            f.write(b"x" * (MAX_READ_BYTES + 1))
+
+        result = await read_hook(
+            {"tool_input": {"file_path": large, "offset": 50}},
+            "tu-1", {"signal": None},
+        )
+        assert result == {}
+
+    async def test_allows_nonexistent_file(self, read_hook):
+        result = await read_hook(
+            {"tool_input": {"file_path": "/nonexistent/path.txt"}},
+            "tu-1", {"signal": None},
+        )
+        assert result == {}
+
+    async def test_allows_empty_path(self, read_hook):
+        result = await read_hook(
+            {"tool_input": {"file_path": ""}},
+            "tu-1", {"signal": None},
+        )
+        assert result == {}

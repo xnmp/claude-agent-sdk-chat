@@ -42,7 +42,9 @@ class TestTranslateResultEvent:
         )
         result = translate_event(event)
         assert len(result) == 1
-        assert result[0]["created_files"] == ["report.csv", "chart.png"]
+        ws = result[0]
+        assert ws["type"] == "result"
+        assert ws["created_files"] == ["report.csv", "chart.png"]  # type: ignore[typeddict-item]
 
     def test_empty_created_files(self):
         event = ResultEvent(
@@ -50,7 +52,9 @@ class TestTranslateResultEvent:
             num_turns=1, is_error=False,
         )
         result = translate_event(event)
-        assert result[0]["created_files"] == []
+        ws = result[0]
+        assert ws["type"] == "result"
+        assert ws["created_files"] == []  # type: ignore[typeddict-item]
 
 
 class TestTranslateFullTurn:

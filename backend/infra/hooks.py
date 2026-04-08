@@ -1,13 +1,15 @@
-"""SDK hooks — enforce output folder constraints and track created files."""
+"""SDK hooks — enforce output folder constraints, track created files, limit reads."""
 
 from __future__ import annotations
 
 import os
 from typing import Any
 
+MAX_READ_BYTES = 100_000  # 100KB
+
 
 def make_hooks(output_dir: str) -> dict:
-    """Create SDK hook config that enforces writes to output_dir and tracks created files.
+    """Create SDK hook config.
 
     Returns a hooks dict suitable for ClaudeAgentOptions.hooks, plus a
     reference to the created_files set for retrieval after a turn.
@@ -41,6 +43,40 @@ def make_hooks(output_dir: str) -> dict:
             }
         return {}
 
+    async def limit_read_size(
+        input_data: dict[str, Any],
+        tool_use_id: str | None,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        tool_input = input_data.get("tool_input", {})
+        file_path = tool_input.get("file_path", "")
+        if not file_path:
+            return {}
+
+        try:
+            abs_path = os.path.realpath(file_path)
+            size = os.path.getsize(abs_path)
+        except OSError:
+            return {}
+
+        # Allow if limit/offset are set (partial read)
+        if tool_input.get("limit") or tool_input.get("offset"):
+            return {}
+
+        if size > MAX_READ_BYTES:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        f"File is {size:,} bytes (limit: {MAX_READ_BYTES:,}). "
+                        f"Use the 'limit' and 'offset' parameters to read a portion, "
+                        f"or use Bash with head/tail to inspect it."
+                    ),
+                }
+            }
+        return {}
+
     async def track_created_files(
         input_data: dict[str, Any],
         tool_use_id: str | None,
@@ -58,8 +94,11 @@ def make_hooks(output_dir: str) -> dict:
     from claude_agent_sdk import HookMatcher
 
     hooks = {
-        "PreToolUse": [HookMatcher(matcher="Write|Edit", hooks=[enforce_output_dir])],
-        "PostToolUse": [HookMatcher(matcher="Write|Edit", hooks=[track_created_files])],
+        "PreToolUse": [
+            HookMatcher(matcher="Write|Edit", hooks=[enforce_output_dir]),  # type: ignore[list-item]
+            HookMatcher(matcher="Read", hooks=[limit_read_size]),  # type: ignore[list-item]
+        ],
+        "PostToolUse": [HookMatcher(matcher="Write|Edit", hooks=[track_created_files])],  # type: ignore[list-item]
     }
 
     return {"hooks": hooks, "created_files": created_files}

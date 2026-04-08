@@ -19,6 +19,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _resolve_attachments(content: str, attachment_ids: list[str]) -> str | None:
+    """Build enriched prompt with file injections, or None if no attachments."""
+    if not attachment_ids:
+        return None
+    enriched = content
+    for aid in attachment_ids:
+        result = get_attachment(aid)
+        if result:
+            _, attachment = result
+            enriched += attachment.injection
+    return enriched
+
+
 async def _send_json(ws: WebSocket, data: WSEvent) -> None:
     try:
         await ws.send_json(data)
@@ -57,14 +70,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
 
                 # Resolve file attachments and build enriched prompt
                 attachment_ids = data.get("attachment_ids", [])
-                enriched: str | None = None
-                if attachment_ids:
-                    enriched = content
-                    for aid in attachment_ids:
-                        result = get_attachment(aid)
-                        if result:
-                            _, attachment = result
-                            enriched += attachment.injection
+                enriched = _resolve_attachments(content, attachment_ids)
 
                 try:
                     async for domain_event in session.handle_user_message(
