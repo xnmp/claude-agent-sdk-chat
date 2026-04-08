@@ -12,7 +12,7 @@ from backend.domain.models import (
     MessageRole,
     User,
 )
-from backend.serializers import serialize_conversation, serialize_message, serialize_user
+from backend.routers.utils.serializers import serialize_conversation, serialize_message, serialize_user
 
 
 def _ts() -> datetime:
