@@ -27,3 +27,4 @@ output/
 output_scripts/
 uploads/
 .uv-cache/
+.mpl-config/

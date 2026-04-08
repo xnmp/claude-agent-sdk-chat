@@ -89,7 +89,9 @@
 					<span class="dot"></span>
 					<span class="dot"></span>
 					{#if liveTurn.tool_calls.length > 0}
-						<span class="streaming-status">{liveTurn.tool_calls[liveTurn.tool_calls.length - 1].name}{liveTurn.tool_calls[liveTurn.tool_calls.length - 1].result === null ? '...' : ''}</span>
+						{@const lastTool = liveTurn.tool_calls[liveTurn.tool_calls.length - 1]}
+						{@const desc = lastTool.input?.description as string | undefined}
+						<span class="streaming-status">{desc || lastTool.name}{lastTool.result === null ? '...' : ''}</span>
 					{/if}
 				</div>
 			{/if}

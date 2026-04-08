@@ -64,13 +64,17 @@ def _build_agent_env() -> dict[str, str]:
 
     env: dict[str, str] = {}
 
-    # Set UV cache to a writable location (sandbox may make ~/.cache read-only)
+    # Set writable cache locations (sandbox may make ~/.cache read-only)
     uv_cache = os.path.join(AGENT_CWD, ".uv-cache")
-    os.makedirs(uv_cache, exist_ok=True)
+    mpl_config = os.path.join(AGENT_CWD, ".mpl-config")
+    for d in [uv_cache, mpl_config]:
+        os.makedirs(d, exist_ok=True)
     env["UV_CACHE_DIR"] = uv_cache
+    env["MPLCONFIGDIR"] = mpl_config
 
-    # Suppress GNOME keyring "secret-tool" errors in sandbox
-    env["DBUS_SESSION_BUS_ADDRESS"] = ""
+    # Suppress GNOME keyring "secret-tool" errors in sandbox.
+    # Point to a valid but unused address so secret-tool fails silently.
+    env["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=/dev/null"
 
     # Blank out non-API secrets regardless
     for var in _SECRET_VARS - {"ANTHROPIC_API_KEY"}:
