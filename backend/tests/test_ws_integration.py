@@ -11,7 +11,7 @@ import uuid
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.models import (
+from backend.domain.models import (
     MessageRole,
     ResultEvent,
     TextEvent,
@@ -19,7 +19,7 @@ from backend.models import (
     ToolResultEvent,
     ToolUseEvent,
 )
-from backend.ports import AppState
+from backend.domain.ports import AppState
 from backend.routers import ws
 from backend.tests.fakes import (
     FakeConversationRepository,

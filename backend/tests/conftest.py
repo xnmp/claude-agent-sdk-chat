@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.models import (
+from backend.domain.models import (
     ModelInfoEvent,
     ResultEvent,
     TextEvent,

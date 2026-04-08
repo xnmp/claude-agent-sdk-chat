@@ -9,7 +9,7 @@ from typing import Any
 import asyncpg
 
 from .config import DATABASE_URL
-from .models import ANONYMOUS_USER_ID, Conversation, Message, MessageContent, MessageRole, User
+from .domain.models import ANONYMOUS_USER_ID, Conversation, Message, MessageContent, MessageRole, User
 
 
 # ---------------------------------------------------------------------------

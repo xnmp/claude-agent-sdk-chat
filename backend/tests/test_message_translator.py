@@ -6,8 +6,8 @@ ModelInfoEvent producing none, and full turn composition.
 
 from __future__ import annotations
 
-from backend.message_translator import translate_event
-from backend.models import (
+from backend.domain.message_translator import translate_event
+from backend.domain.models import (
     ModelInfoEvent,
     ToolUseEvent,
 )

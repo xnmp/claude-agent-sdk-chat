@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from backend.chat import ChatSession, ConversationNotFoundError
-from backend.models import (
+from backend.domain.chat import ChatSession, ConversationNotFoundError
+from backend.domain.models import (
     MessageRole,
     ResultEvent,
     TextEvent,

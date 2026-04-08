@@ -17,7 +17,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from backend.models import (
+from backend.domain.models import (
     ModelInfoEvent,
     ResultEvent,
     TextEvent,

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from backend.models import (
+from backend.domain.models import (
     ANONYMOUS_USER_ID,
     Conversation,
     Message,

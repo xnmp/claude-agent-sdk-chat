@@ -14,7 +14,7 @@ from .db import (
     close_pool,
     init_pool,
 )
-from .ports import AppState
+from .domain.ports import AppState
 from .routers import auth, conversations, ws
 from .sdk_manager import SDKManager
 

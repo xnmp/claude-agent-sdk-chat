@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from ..models import User
-from ..ports import AppState, UserRepository
+from ..domain.models import User
+from ..domain.ports import AppState, UserRepository
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
