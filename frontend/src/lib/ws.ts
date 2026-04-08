@@ -74,8 +74,8 @@ export function createWsClient(conversationId: string, onMessage: (msg: WsMessag
 		retryTimer = setTimeout(_open, delay);
 	}
 
-	function send(content: string) {
-		ws?.send(JSON.stringify({ type: 'user_message', content }));
+	function send(content: string, attachmentIds: string[] = []) {
+		ws?.send(JSON.stringify({ type: 'user_message', content, attachment_ids: attachmentIds }));
 	}
 
 	function interrupt() {

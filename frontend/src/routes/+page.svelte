@@ -4,7 +4,7 @@
 	import ChatView from '../components/ChatView.svelte';
 	import Login from '../components/Login.svelte';
 	import type { Conversation, Message, LiveTurn, WsMessage, AssistantContent, User } from '$lib/types';
-	import { listConversations, createConversation, getMessages, deleteConversation, login } from '$lib/api';
+	import { listConversations, createConversation, getMessages, deleteConversation, login, uploadFile } from '$lib/api';
 	import { createWsClient, type WsClient, type WsStatus } from '$lib/ws';
 	import { processWsMessage } from '$lib/liveTurnReducer';
 	import { loadSettings, saveSettings, applyTheme, type Settings } from '$lib/settings';
@@ -96,14 +96,29 @@
 		}
 	}
 
-	function handleSendMessage(content: string) {
-		if (!wsClient || isStreaming) return;
+	async function handleSendMessage(content: string, files: File[] = []) {
+		if (!wsClient || isStreaming || !activeConversationId) return;
+
+		// Upload files first
+		const attachmentIds: string[] = [];
+		for (const file of files) {
+			try {
+				const result = await uploadFile(activeConversationId, file);
+				attachmentIds.push(result.id);
+			} catch {
+				// TODO: surface upload errors to UI
+			}
+		}
+
+		const displayText = files.length > 0
+			? `${content}${content ? '\n' : ''}[${files.map(f => f.name).join(', ')}]`
+			: content;
 
 		const userMsg: Message = {
 			id: crypto.randomUUID(),
-			conversation_id: activeConversationId!,
+			conversation_id: activeConversationId,
 			role: 'user',
-			content: { text: content },
+			content: { text: displayText },
 			created_at: new Date().toISOString()
 		};
 		messages = [...messages, userMsg];
@@ -111,7 +126,7 @@
 		isStreaming = true;
 		liveTurn = { thinking: [], tool_calls: [], text: '' };
 
-		wsClient.send(content);
+		wsClient.send(content || `[Attached: ${files.map(f => f.name).join(', ')}]`, attachmentIds);
 	}
 
 	function handleInterrupt() {

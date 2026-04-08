@@ -10,6 +10,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..domain.chat import ChatSession, ConversationNotFoundError
 from ..domain.ports import AppState
+from .uploads import get_attachment
 from .utils.message_translator import translate_event
 from .utils.ws_events import ErrorWS, WSEvent
 
@@ -53,6 +54,14 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
                 content = data.get("content", "").strip()
                 if not content:
                     continue
+
+                # Resolve file attachments and inject into prompt
+                attachment_ids = data.get("attachment_ids", [])
+                for aid in attachment_ids:
+                    result = get_attachment(aid)
+                    if result:
+                        _, attachment = result
+                        content += attachment.injection
 
                 try:
                     async for domain_event in session.handle_user_message(content):

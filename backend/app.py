@@ -17,7 +17,7 @@ from .infra.db import (
     init_pool,
 )
 from .domain.ports import AppState
-from .routers import auth, conversations, ws
+from .routers import auth, conversations, uploads, ws
 from .infra.sdk_manager import SDKManager
 
 
@@ -49,6 +49,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(conversations.router)
+app.include_router(uploads.router)
 app.include_router(ws.router)
 
 # Serve output files for download
