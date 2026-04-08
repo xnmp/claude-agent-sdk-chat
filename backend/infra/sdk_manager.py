@@ -112,18 +112,30 @@ def _translate_user(msg: UserMessage) -> list[SDKEvent]:
     return events
 
 
-class SDKManager:
-    """Concrete SDKClientFactory — creates and caches SDK client adapters."""
+_DEFAULT_IDLE_TTL = 30 * 60  # 30 minutes
 
-    def __init__(self) -> None:
+
+class SDKManager:
+    """Concrete SDKClientFactory — creates and caches SDK client adapters.
+
+    Tracks last-access time per client and evicts idle clients that exceed
+    the TTL, preventing unbounded subprocess leaks from abandoned conversations.
+    """
+
+    def __init__(self, idle_ttl: float = _DEFAULT_IDLE_TTL) -> None:
         self._clients: dict[str, ClaudeSDKClientAdapter] = {}
+        self._last_access: dict[str, float] = {}
+        self._idle_ttl = idle_ttl
 
     async def create(
         self,
         session_id: str,
         resume: bool = False,
     ) -> ClaudeSDKClientAdapter:
+        await self._evict_idle()
+
         if session_id in self._clients:
+            self._last_access[session_id] = _now()
             return self._clients[session_id]
 
         options = ClaudeAgentOptions(
@@ -145,9 +157,11 @@ class SDKManager:
         client = ClaudeSDKClient(options=options)
         adapter = ClaudeSDKClientAdapter(client)
         self._clients[session_id] = adapter
+        self._last_access[session_id] = _now()
         return adapter
 
     async def remove(self, session_id: str) -> None:
+        self._last_access.pop(session_id, None)
         adapter = self._clients.pop(session_id, None)
         if adapter:
             try:
@@ -157,3 +171,18 @@ class SDKManager:
 
     def has(self, session_id: str) -> bool:
         return session_id in self._clients
+
+    async def _evict_idle(self) -> None:
+        """Remove clients that have been idle longer than the TTL."""
+        now = _now()
+        expired = [
+            sid for sid, ts in self._last_access.items()
+            if now - ts > self._idle_ttl
+        ]
+        for sid in expired:
+            await self.remove(sid)
+
+
+def _now() -> float:
+    import time
+    return time.monotonic()
