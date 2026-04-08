@@ -52,6 +52,27 @@ export async function deleteConversation(conversationId: string): Promise<void> 
 	await request(`${BASE}/conversations/${conversationId}`, { method: 'DELETE' });
 }
 
+export interface UploadResult {
+	id: string;
+	filename: string;
+	size: number;
+	type: string;
+}
+
+export async function uploadFile(conversationId: string, file: File): Promise<UploadResult> {
+	const formData = new FormData();
+	formData.append('file', file);
+	const res = await fetch(`${BASE}/upload/${conversationId}`, {
+		method: 'POST',
+		body: formData
+	});
+	if (!res.ok) {
+		const text = await res.text().catch(() => res.statusText);
+		throw new ApiError(res.status, text);
+	}
+	return res.json();
+}
+
 export async function updateConversationTitle(
 	conversationId: string,
 	title: string

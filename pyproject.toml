@@ -12,6 +12,7 @@ dependencies = [
     "asyncpg>=0.30",
     "pyrefly>=0.60.0",
     "python-dotenv>=1.2.2",
+    "pymupdf>=1.27.2.2",
 ]
 
 [tool.pytest.ini_options]

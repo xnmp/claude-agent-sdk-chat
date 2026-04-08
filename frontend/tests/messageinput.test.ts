@@ -43,7 +43,7 @@ describe('MessageInput', () => {
 
 		await user.type(screen.getByRole('textbox'), '  hello world  ');
 		await user.click(screen.getByText('Send'));
-		expect(onSend).toHaveBeenCalledWith('hello world');
+		expect(onSend).toHaveBeenCalledWith('hello world', []);
 	});
 
 	it('clears input after sending', async () => {
