@@ -9,8 +9,9 @@ from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..domain.chat import ChatSession, ConversationNotFoundError
-from ..domain.models import ErrorWS, WSEvent
 from ..domain.ports import AppState
+from .utils.message_translator import translate_event
+from .utils.ws_events import ErrorWS, WSEvent
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +55,9 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
                     continue
 
                 try:
-                    async for ws_msg in session.handle_user_message(content):
-                        await _send_json(websocket, ws_msg)
+                    async for domain_event in session.handle_user_message(content):
+                        for ws_msg in translate_event(domain_event):
+                            await _send_json(websocket, ws_msg)
                 except Exception as e:
                     logger.error("SDK stream error: %s", traceback.format_exc())
                     await _send_json(websocket, ErrorWS(type="error", message=str(e)))

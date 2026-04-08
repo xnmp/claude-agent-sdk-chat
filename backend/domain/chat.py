@@ -1,7 +1,7 @@
 """Chat orchestration — domain logic with no infrastructure dependencies.
 
-Depends only on port interfaces, domain models, and the message translator.
-Does NOT import from claude_agent_sdk.
+Depends only on port interfaces and domain models.
+Does NOT import from claude_agent_sdk or transport-layer types.
 """
 
 from __future__ import annotations
@@ -11,13 +11,12 @@ import uuid
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from .message_translator import translate_event
 from .models import (
     AssistantTurn,
     MessageRole,
     ResultEvent,
+    SDKEvent,
     UserMessageContent,
-    WSEvent,
 )
 from .ports import ConversationRepository, MessageRepository, SDKClient, SDKClientFactory
 
@@ -53,8 +52,8 @@ class ChatSession:
             raise ConversationNotFoundError(self.conversation_id)
         self._sdk_session_id = conv.sdk_session_id
 
-    async def handle_user_message(self, content: str) -> AsyncIterator[WSEvent]:
-        """Process a user message and yield WebSocket events."""
+    async def handle_user_message(self, content: str) -> AsyncIterator[SDKEvent]:
+        """Process a user message and yield domain events."""
         # Persist user message
         await self._messages.save(
             conversation_id=self.conversation_id,
@@ -84,9 +83,7 @@ class ChatSession:
                 )
 
             turn.process(event)
-
-            for ws_event in translate_event(event):
-                yield ws_event
+            yield event
 
             if isinstance(event, ResultEvent):
                 await self._messages.save(

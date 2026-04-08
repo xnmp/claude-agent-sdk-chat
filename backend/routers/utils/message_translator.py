@@ -5,19 +5,21 @@ Pure functions — no infrastructure dependencies, no SDK imports.
 
 from __future__ import annotations
 
-from .models import (
-    AssistantTextWS,
+from ...domain.models import (
     ModelInfoEvent,
     ResultEvent,
-    ResultWS,
     SDKEvent,
     TextEvent,
     ThinkingEvent,
+    ToolResultEvent,
+    ToolUseEvent,
+)
+from .ws_events import (
+    AssistantTextWS,
+    ResultWS,
     ThinkingWS,
     ToolInputWS,
-    ToolResultEvent,
     ToolResultWS,
-    ToolUseEvent,
     ToolUseWS,
     WSEvent,
 )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 from typing_extensions import TypedDict
 from uuid import UUID
 
@@ -140,60 +140,6 @@ class ResultEvent:
 
 
 SDKEvent = ThinkingEvent | ToolUseEvent | ToolResultEvent | TextEvent | ModelInfoEvent | ResultEvent
-
-
-# ---------------------------------------------------------------------------
-# WebSocket protocol events (sent to frontend)
-# ---------------------------------------------------------------------------
-
-
-class ThinkingWS(TypedDict):
-    type: Literal["thinking"]
-    thinking: str
-    message_id: str
-
-
-class ToolUseWS(TypedDict):
-    type: Literal["tool_use"]
-    id: str
-    name: str
-    message_id: str
-
-
-class ToolInputWS(TypedDict):
-    type: Literal["tool_input"]
-    tool_use_id: str
-    input: dict[str, Any]
-
-
-class ToolResultWS(TypedDict):
-    type: Literal["tool_result"]
-    tool_use_id: str
-    content: str
-    is_error: bool
-
-
-class AssistantTextWS(TypedDict):
-    type: Literal["assistant_text"]
-    text: str
-    message_id: str
-
-
-class ResultWS(TypedDict):
-    type: Literal["result"]
-    session_id: str
-    duration_ms: int
-    total_cost_usd: float
-    num_turns: int
-    is_error: bool
-
-
-class ErrorWS(TypedDict):
-    type: Literal["error"]
-    message: str
-
-
-WSEvent = ThinkingWS | ToolUseWS | ToolInputWS | ToolResultWS | AssistantTextWS | ResultWS | ErrorWS
 
 
 # ---------------------------------------------------------------------------
