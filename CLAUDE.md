@@ -107,7 +107,11 @@ PostgreSQL on port 5433 (Docker). Schema in `schema.sql`. Auth-ready with `user_
 - All development happens on the `dev` branch. Create feature branches off `dev` and merge back to `dev`. Don't modify files directly on `dev`.
 - Always use a merge commit when merging
 - Convention: branch names map to issues by title. Branch `feat/my-feature` matches an issue whose title contains "my-feature". A hook validates that a matching open issue exists before allowing branch creation.
-- When creating issues, include a `## Screenshots` section in the issue body with markdown checkboxes (e.g., `- [ ] sidebar`). Screenshots must be saved to `screenshots/<branch>/`. The merge hook verifies they exist. Use 'None required' only for pure backend/refactor changes with no user-visible effect. Behavioral fixes still need a screenshot showing the corrected behavior.
+- When creating issues, include a `## Screenshots` section in the issue body with markdown checkboxes (e.g., `- [ ] sidebar`). 
+	- It is **CRITICAL** that you specify screenshots that will actually validate that the feature is working as intended. Don't just require a screenshot of a new button, require screenshots showing that the new button does what it's intended to do. 
+	- Screenshots must be saved to `screenshots/<branch>/`. The merge hook verifies they exist. 
+	- Use 'None required' only for pure backend/refactor changes with no user-visible effect. 
+	- Behavioral fixes still need a screenshot showing the corrected behavior.
 
 #### Per-Issue Checklist
 
