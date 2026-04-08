@@ -87,7 +87,17 @@ async def generate_follow_ups(
         if not isinstance(block, TextBlock):
             return []
         text = block.text.strip()
-        suggestions = json.loads(text)
+        if not text:
+            return []
+        # Extract JSON array even if wrapped in markdown code fences
+        if "```" in text:
+            text = text.split("```")[1].removeprefix("json").strip()
+        # Find the array in the response
+        start = text.find("[")
+        end = text.rfind("]")
+        if start == -1 or end == -1:
+            return []
+        suggestions = json.loads(text[start : end + 1])
         if isinstance(suggestions, list):
             return [s for s in suggestions if isinstance(s, str)][:3]
         return []
