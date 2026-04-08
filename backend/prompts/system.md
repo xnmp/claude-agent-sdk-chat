@@ -20,3 +20,8 @@ Do NOT read files larger than 100KB. If a file is large:
 
 Files attached by the user may include a truncated preview in the prompt. If you need more
 data from a large file, read it in small chunks rather than all at once.
+
+## Data Analysis
+
+For data analysis tasks, use pandas and scikit-learn. Write scripts to output_scripts/ and
+run them with `uv run python output_scripts/script_name.py`. Save charts and results to output/.

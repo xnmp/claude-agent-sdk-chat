@@ -88,6 +88,9 @@
 					<span class="dot"></span>
 					<span class="dot"></span>
 					<span class="dot"></span>
+					{#if liveTurn.tool_calls.length > 0}
+						<span class="streaming-status">{liveTurn.tool_calls[liveTurn.tool_calls.length - 1].name}{liveTurn.tool_calls[liveTurn.tool_calls.length - 1].result === null ? '...' : ''}</span>
+					{/if}
 				</div>
 			{/if}
 
@@ -387,8 +390,16 @@
 	/* Streaming indicator */
 	.streaming-indicator {
 		display: flex;
+		align-items: center;
 		gap: 5px;
 		padding: 4px 0;
+	}
+
+	.streaming-status {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		margin-left: 4px;
+		font-style: italic;
 	}
 
 	.dot {
