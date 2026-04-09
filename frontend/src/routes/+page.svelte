@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount } from 'svelte';
 	import Sidebar from '../components/Sidebar.svelte';
 	import ChatView from '../components/ChatView.svelte';
 	import Login from '../components/Login.svelte';
@@ -129,13 +129,23 @@
 		wsClient = client;
 	}
 
+	let pendingNewChatFocus = $state(false);
+
 	async function handleNewChat() {
 		const conv = await createConversation();
 		conversations = [conv, ...conversations];
+		pendingNewChatFocus = true;
 		await selectConversation(conv.id);
-		await tick();
-		chatView?.focusInput();
 	}
+
+	// Focus the input once the new conversation's WS is actually connected —
+	// until then the textarea is disabled and focus() is a no-op.
+	$effect(() => {
+		if (pendingNewChatFocus && wsStatus === 'connected') {
+			pendingNewChatFocus = false;
+			chatView?.focusInput();
+		}
+	});
 
 	async function handleDeleteConversation(id: string) {
 		await deleteConversation(id);
