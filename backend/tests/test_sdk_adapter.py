@@ -25,7 +25,18 @@ from backend.domain.models import (
     ToolResultEvent,
     ToolUseEvent,
 )
-from backend.infra.sdk_manager import _translate_assistant, _translate_user
+from backend.infra.sdk_manager import _SANDBOX_SETTINGS, _translate_assistant, _translate_user
+
+
+class TestSandboxSettings:
+    def test_disallows_dangerous_sandbox_bypass(self):
+        # The agent must never be able to invoke Bash with
+        # dangerouslyDisableSandbox: True. The SDK enforces this when
+        # allowUnsandboxedCommands is False.
+        assert _SANDBOX_SETTINGS["allowUnsandboxedCommands"] is False
+
+    def test_sandbox_is_enabled(self):
+        assert _SANDBOX_SETTINGS["enabled"] is True
 
 
 class TestTranslateAssistant:
