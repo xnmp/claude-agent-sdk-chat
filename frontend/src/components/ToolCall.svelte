@@ -10,6 +10,10 @@
 	let statusClass = $derived(
 		tool.result === null ? 'running' : tool.is_error ? 'error' : 'success'
 	);
+
+	let description = $derived(
+		typeof tool.input.description === 'string' ? tool.input.description : null
+	);
 </script>
 
 <details class="tool-call">
@@ -18,6 +22,9 @@
 			<path d="M7.5 1.5L5.5 5.5H1.5L5.5 11.5L7.5 7.5H11.5L7.5 1.5Z" />
 		</svg>
 		<span class="tool-name">{tool.name}</span>
+		{#if description}
+			<span class="tool-description">{description}</span>
+		{/if}
 		<span class="status {statusClass}">{statusLabel}</span>
 	</summary>
 	<div class="tool-detail">
@@ -77,6 +84,16 @@
 		font-weight: 500;
 		font-size: 0.8125rem;
 		color: var(--text-secondary);
+		flex-shrink: 0;
+	}
+
+	.tool-description {
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
 	}
 
 	.status {
