@@ -30,6 +30,15 @@ from .hooks import make_hooks
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
+# Sandbox configuration for the agent's Bash tool. allowUnsandboxedCommands
+# must stay False so the agent cannot bypass the sandbox via
+# dangerouslyDisableSandbox.
+_SANDBOX_SETTINGS = {
+    "enabled": True,
+    "autoAllowBashIfSandboxed": True,
+    "allowUnsandboxedCommands": False,
+}
+
 # Env vars safe to pass through to the agent subprocess.
 _ENV_ALLOWLIST = frozenset({
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "USER", "SHELL",
@@ -232,10 +241,7 @@ class SDKManager:
             model=ANTHROPIC_MODEL or None,
             system_prompt=_load_system_prompt(output_dir, scripts_dir),
             setting_sources=["user", "project"],
-            sandbox={
-                "enabled": True,
-                "autoAllowBashIfSandboxed": True,
-            },
+            sandbox=_SANDBOX_SETTINGS,
             hooks=hook_config["hooks"],
             env=_build_agent_env(),
         )
