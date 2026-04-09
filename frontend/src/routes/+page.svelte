@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import Sidebar from '../components/Sidebar.svelte';
 	import ChatView from '../components/ChatView.svelte';
 	import Login from '../components/Login.svelte';
@@ -19,6 +19,7 @@
 	let wsClient = $state<WsClient | null>(null);
 	let wsStatus = $state<WsStatus>('disconnected');
 	let suggestions = $state<string[]>([]);
+	let chatView: ChatView | undefined = $state();
 
 	// Per-conversation background streaming state
 	interface BgStream { turn: LiveTurn; suggestions: string[]; ws: WsClient; done: boolean }
@@ -132,6 +133,8 @@
 		const conv = await createConversation();
 		conversations = [conv, ...conversations];
 		await selectConversation(conv.id);
+		await tick();
+		chatView?.focusInput();
 	}
 
 	async function handleDeleteConversation(id: string) {
@@ -329,6 +332,7 @@
 	/>
 
 	<ChatView
+		bind:this={chatView}
 		{messages}
 		{liveTurn}
 		{isStreaming}

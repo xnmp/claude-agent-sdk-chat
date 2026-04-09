@@ -18,8 +18,13 @@
 	let input = $state('');
 	let attachedFiles = $state<File[]>([]);
 	let fileInput: HTMLInputElement | undefined = $state();
+	let textareaEl: HTMLTextAreaElement | undefined = $state();
 	let showSuggestions = $state(true);
 	let isDragging = $state(false);
+
+	export function focus() {
+		textareaEl?.focus();
+	}
 
 	function handleDragOver(e: DragEvent) {
 		e.preventDefault();
@@ -140,6 +145,7 @@
 			style="display: none"
 		/>
 		<textarea
+			bind:this={textareaEl}
 			bind:value={input}
 			onkeydown={handleKeydown}
 			placeholder={disabled ? 'Select or create a conversation' : 'Send a message...'}

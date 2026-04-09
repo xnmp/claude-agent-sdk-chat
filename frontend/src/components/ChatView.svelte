@@ -27,6 +27,11 @@
 	} = $props();
 
 	let scrollContainer: HTMLDivElement | undefined = $state();
+	let messageInput: MessageInput | undefined = $state();
+
+	export function focusInput() {
+		messageInput?.focus();
+	}
 
 	// Auto-scroll is a genuine DOM side effect — $effect is appropriate here
 	$effect(() => {
@@ -75,6 +80,7 @@
 		</div>
 
 		<MessageInput
+			bind:this={messageInput}
 			{isStreaming}
 			disabled={wsStatus !== 'connected'}
 			{suggestions}
