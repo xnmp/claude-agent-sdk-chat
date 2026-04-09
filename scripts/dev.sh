@@ -27,7 +27,7 @@ docker exec -i claude-chat-postgres psql -U claude_chat -d claude_chat < "$ROOT/
 # Start backend
 echo "Starting backend on :8000..."
 cd "$ROOT"
-uv run uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload &
+uv run uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend --reload-include '*.py' &
 BACKEND_PID=$!
 
 # Start frontend
