@@ -83,6 +83,15 @@ test.describe('Conversation lifecycle', () => {
 		await expect(page.locator('.conversation-item').first()).not.toHaveClass(/active/);
 	});
 
+	test('clicking New focuses the message input', async ({ page }) => {
+		await page.getByRole('button', { name: 'New', exact: true }).click();
+
+		const textarea = page.getByPlaceholder('Send a message...');
+		// The textarea only becomes enabled once WS connects; focus should
+		// land on it without any additional user interaction.
+		await expect(textarea).toBeFocused();
+	});
+
 	test('logout clears state and shows login form', async ({ page }) => {
 		await page.getByRole('button', { name: 'Sign out' }).click();
 
