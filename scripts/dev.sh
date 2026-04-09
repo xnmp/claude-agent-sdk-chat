@@ -24,19 +24,42 @@ sleep 2
 echo "Running schema..."
 docker exec -i claude-chat-postgres psql -U claude_chat -d claude_chat < "$ROOT/schema.sql"
 
+run_backend() {
+    trap 'exit 0' INT TERM
+    cd "$ROOT"
+    while true; do
+        uv run uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend --reload-include '*.py' || true
+        echo "Backend exited, restarting in 1s..." >&2
+        sleep 1
+    done
+}
+
+run_frontend() {
+    trap 'exit 0' INT TERM
+    cd "$ROOT/frontend"
+    while true; do
+        bun run dev || true
+        echo "Frontend exited, restarting in 1s..." >&2
+        sleep 1
+    done
+}
+
+cleanup() {
+    kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+    pkill -f 'uvicorn backend' 2>/dev/null || true
+    pkill -f 'vite.*5173' 2>/dev/null || true
+}
+trap cleanup EXIT
+
 # Start backend
 echo "Starting backend on :8000..."
-cd "$ROOT"
-uv run uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend --reload-include '*.py' &
+run_backend &
 BACKEND_PID=$!
 
 # Start frontend
 echo "Starting frontend on :5173..."
-cd "$ROOT/frontend"
-bun run dev &
+run_frontend &
 FRONTEND_PID=$!
-
-trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null" EXIT
 
 echo ""
 echo "Backend:  http://localhost:8000"
