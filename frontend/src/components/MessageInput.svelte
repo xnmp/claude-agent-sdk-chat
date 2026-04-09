@@ -81,6 +81,8 @@
 <div
 	class="input-area"
 	class:dragging={isDragging}
+	role="region"
+	aria-label="Message composer"
 	ondragover={handleDragOver}
 	ondragleave={handleDragLeave}
 	ondrop={handleDrop}
