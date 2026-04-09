@@ -197,6 +197,52 @@ class TestEnforceReadDirs:
         assert result.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
 
 
+class TestBlockDangerousSandbox:
+    @pytest.fixture
+    def block_hook(self, hook_config):
+        # First hook in Bash matcher is block_dangerous_sandbox.
+        # Bash matcher is the third PreToolUse entry (after Write|Edit and Read).
+        return hook_config["hooks"]["PreToolUse"][2].hooks[0]
+
+    async def test_blocks_when_flag_true(self, block_hook):
+        result = await block_hook(
+            {"tool_input": {"command": "ls", "dangerouslyDisableSandbox": True}},
+            "tu-1", {"signal": None},
+        )
+        decision = result.get("hookSpecificOutput", {})
+        assert decision.get("permissionDecision") == "deny"
+        assert "dangerouslyDisableSandbox" in decision.get("permissionDecisionReason", "")
+
+    async def test_allows_when_flag_false(self, block_hook):
+        result = await block_hook(
+            {"tool_input": {"command": "ls", "dangerouslyDisableSandbox": False}},
+            "tu-1", {"signal": None},
+        )
+        assert result == {}
+
+    async def test_allows_when_flag_absent(self, block_hook):
+        result = await block_hook(
+            {"tool_input": {"command": "ls"}},
+            "tu-1", {"signal": None},
+        )
+        assert result == {}
+
+    async def test_does_not_treat_truthy_string_as_disabled(self, block_hook):
+        # Only literal True should trip the guard — strings, ints, etc. don't.
+        result = await block_hook(
+            {"tool_input": {"command": "ls", "dangerouslyDisableSandbox": "true"}},
+            "tu-1", {"signal": None},
+        )
+        assert result == {}
+
+    async def test_registered_under_bash_matcher(self, hook_config):
+        bash_entry = hook_config["hooks"]["PreToolUse"][2]
+        assert bash_entry.matcher == "Bash"
+        # The block hook must run before the snapshot hook so a denied
+        # call doesn't pollute the snapshot state.
+        assert bash_entry.hooks[0].__name__ == "block_dangerous_sandbox"
+
+
 class TestLimitReadSize:
     @pytest.fixture
     def read_hook(self, hook_config):

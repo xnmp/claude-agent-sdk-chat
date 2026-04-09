@@ -132,6 +132,30 @@ def make_hooks(
                 found.add(os.path.relpath(full, abs_output))
         return found
 
+    async def block_dangerous_sandbox(
+        input_data: dict[str, Any],
+        tool_use_id: str | None,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Refuse any Bash call that tries to disable the sandbox.
+
+        The Bash tool exposes a `dangerouslyDisableSandbox` parameter that
+        bypasses sandboxing entirely. The agent must never be able to use it.
+        """
+        tool_input = input_data.get("tool_input", {})
+        if tool_input.get("dangerouslyDisableSandbox") is True:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "dangerouslyDisableSandbox is not permitted. "
+                        "Run the command inside the sandbox instead."
+                    ),
+                }
+            }
+        return {}
+
     async def snapshot_output_before_bash(
         input_data: dict[str, Any],
         tool_use_id: str | None,
@@ -159,7 +183,7 @@ def make_hooks(
         "PreToolUse": [
             HookMatcher(matcher="Write|Edit", hooks=[enforce_write_dirs]),  # type: ignore[list-item]
             HookMatcher(matcher="Read", hooks=[enforce_read_dirs, limit_read_size]),  # type: ignore[list-item]
-            HookMatcher(matcher="Bash", hooks=[snapshot_output_before_bash]),  # type: ignore[list-item]
+            HookMatcher(matcher="Bash", hooks=[block_dangerous_sandbox, snapshot_output_before_bash]),  # type: ignore[list-item]
         ],
         "PostToolUse": [
             HookMatcher(matcher="Write|Edit", hooks=[track_created_files]),  # type: ignore[list-item]
