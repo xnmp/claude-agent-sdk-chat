@@ -39,6 +39,26 @@ _SANDBOX_SETTINGS = {
     "allowUnsandboxedCommands": False,
 }
 
+# Standalone stdio MCP servers spawned alongside the agent. The SDK launches
+# these as subprocesses and speaks JSON-RPC over stdin/stdout — they run
+# *outside* the Bash sandbox, so they don't need any of the sandbox relaxations
+# that would be required to reach a TCP localhost service. See `mytools/`.
+#
+# --directory pins `uv run` to the repo root regardless of AGENT_CWD, so the
+# MCP subprocess always resolves `mytools.server` to the same module that this
+# process was loaded with.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_MCP_SERVERS: dict[str, dict[str, object]] = {
+    "mytools": {
+        "command": "uv",
+        "args": ["run", "--directory", str(_REPO_ROOT), "python", "-m", "mytools.server"],
+    },
+}
+
+# MCP tool names take the form `mcp__<server>__<tool>`. Each tool defined on a
+# registered MCP server must be listed here or the agent can't invoke it.
+_MCP_ALLOWED_TOOLS = ["mcp__mytools__ping", "mcp__mytools__echo"]
+
 # Env vars safe to pass through to the agent subprocess.
 _ENV_ALLOWLIST = frozenset({
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "USER", "SHELL",
@@ -235,13 +255,17 @@ class SDKManager:
         hook_config = make_hooks(output_dir, scripts_dir, uploads_dir)
 
         options = ClaudeAgentOptions(
-            allowed_tools=["Read", "Edit", "Bash", "Glob", "Grep", "Write", "Skill"],
+            allowed_tools=[
+                "Read", "Edit", "Bash", "Glob", "Grep", "Write", "Skill",
+                *_MCP_ALLOWED_TOOLS,
+            ],
             permission_mode="acceptEdits",
             cwd=AGENT_CWD,
             model=ANTHROPIC_MODEL or None,
             system_prompt=_load_system_prompt(output_dir, scripts_dir),
             setting_sources=["user", "project"],
             sandbox=_SANDBOX_SETTINGS,
+            mcp_servers=_MCP_SERVERS,  # type: ignore[arg-type]
             hooks=hook_config["hooks"],
             env=_build_agent_env(),
         )
