@@ -33,8 +33,42 @@ class ToolResultWS(TypedDict):
 
 
 class AssistantTextWS(TypedDict):
+    """Final, complete text block — used by tests/fakes and as a non-streaming
+    fallback. The streaming production path uses TextBlockStartWS + TextDeltaWS
+    instead."""
     type: Literal["assistant_text"]
     text: str
+    message_id: str
+
+
+class TextBlockStartWS(TypedDict):
+    """Marks the start of a streaming text block. The frontend opens an empty
+    text block; subsequent TextDeltaWS messages grow it."""
+    type: Literal["text_block_start"]
+    block_index: int
+    message_id: str
+
+
+class TextDeltaWS(TypedDict):
+    """An incremental text fragment for the most recently opened text block."""
+    type: Literal["text_delta"]
+    text: str
+    block_index: int
+    message_id: str
+
+
+class ThinkingBlockStartWS(TypedDict):
+    """Marks the start of a streaming thinking block."""
+    type: Literal["thinking_block_start"]
+    block_index: int
+    message_id: str
+
+
+class ThinkingDeltaWS(TypedDict):
+    """An incremental thinking fragment for the most recently opened thinking block."""
+    type: Literal["thinking_delta"]
+    thinking: str
+    block_index: int
     message_id: str
 
 
@@ -63,4 +97,18 @@ class TitleUpdateWS(TypedDict):
     title: str
 
 
-WSEvent = ThinkingWS | ToolUseWS | ToolInputWS | ToolResultWS | AssistantTextWS | ResultWS | ErrorWS | SuggestionsWS | TitleUpdateWS
+WSEvent = (
+    ThinkingWS
+    | ToolUseWS
+    | ToolInputWS
+    | ToolResultWS
+    | AssistantTextWS
+    | TextBlockStartWS
+    | TextDeltaWS
+    | ThinkingBlockStartWS
+    | ThinkingDeltaWS
+    | ResultWS
+    | ErrorWS
+    | SuggestionsWS
+    | TitleUpdateWS
+)

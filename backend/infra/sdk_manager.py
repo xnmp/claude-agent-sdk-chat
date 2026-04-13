@@ -14,6 +14,7 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     ClaudeSDKClient,
     ResultMessage,
+    StreamEvent,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
@@ -21,9 +22,11 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
+import json
 import os
 
 from pathlib import Path
+from typing import Any
 
 from ..config import AGENT_CWD, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, AUTH_PROXY_ENABLED, AUTH_PROXY_PORT
 from .hooks import make_hooks
@@ -135,19 +138,37 @@ from ..domain.models import (
     ModelInfoEvent,
     ResultEvent,
     SDKEvent,
-    TextEvent,
-    ThinkingEvent,
+    TextBlockStartEvent,
+    TextDeltaEvent,
+    ThinkingBlockStartEvent,
+    ThinkingDeltaEvent,
     ToolResultEvent,
     ToolUseEvent,
 )
 
 
 class ClaudeSDKClientAdapter:
-    """Wraps ClaudeSDKClient, translating SDK messages into domain events."""
+    """Wraps ClaudeSDKClient, translating SDK messages into domain events.
+
+    Runs the SDK in `include_partial_messages=True` mode so we can stream
+    text/thinking deltas to the UI as they arrive. The adapter keeps a small
+    amount of per-content-block state (open block kinds, buffered tool input
+    JSON) so it can:
+      - emit ``TextBlockStartEvent`` + ``TextDeltaEvent`` per text block
+      - emit ``ThinkingBlockStartEvent`` + ``ThinkingDeltaEvent`` per thinking
+      - buffer ``input_json_delta`` fragments and emit one ``ToolUseEvent``
+        with the parsed input on ``content_block_stop``
+
+    The buffered ``AssistantMessage`` that the SDK still delivers is then used
+    only for ``model``/``usage`` metadata — its content blocks would duplicate
+    what the stream events already produced.
+    """
 
     def __init__(self, client: ClaudeSDKClient, created_files: set[str] | None = None) -> None:
         self._client = client
         self.created_files: set[str] = created_files if created_files is not None else set()
+        self._current_message_id: str = ""
+        self._open_blocks: dict[int, dict[str, Any]] = {}
 
     async def connect(self) -> None:
         await self._client.connect()
@@ -169,8 +190,15 @@ class ClaudeSDKClientAdapter:
 
     async def receive_response(self) -> AsyncIterator[SDKEvent]:
         async for msg in self._client.receive_response():
-            if isinstance(msg, AssistantMessage):
-                for event in _translate_assistant(msg):
+            if isinstance(msg, StreamEvent):
+                for event in self._handle_stream_event(msg):
+                    yield event
+            elif isinstance(msg, AssistantMessage):
+                # Content blocks (text/thinking/tool_use) come from stream events;
+                # only forward the model/usage metadata here. Tool *results* sometimes
+                # arrive as ToolResultBlocks on AssistantMessage in synthetic flows,
+                # so still emit those.
+                for event in _translate_assistant_meta(msg):
                     yield event
             elif isinstance(msg, UserMessage):
                 for event in _translate_user(msg):
@@ -185,34 +213,120 @@ class ClaudeSDKClientAdapter:
                     created_files=self.pop_created_files(),
                 )
 
+    # -- StreamEvent dispatch -----------------------------------------------
 
-def _translate_assistant(msg: AssistantMessage) -> list[SDKEvent]:
-    """Translate an AssistantMessage into domain events."""
+    def _handle_stream_event(self, msg: StreamEvent) -> list[SDKEvent]:
+        """Translate one raw Anthropic API stream event into domain events.
+
+        Tracks per-content-block state across calls so deltas can be associated
+        with their start events and tool input JSON can be assembled.
+        """
+        ev = msg.event or {}
+        et = ev.get("type")
+
+        if et == "message_start":
+            inner = ev.get("message") or {}
+            self._current_message_id = inner.get("id") or msg.uuid or ""
+            self._open_blocks = {}
+            return []
+
+        if et == "content_block_start":
+            return self._on_block_start(ev)
+
+        if et == "content_block_delta":
+            return self._on_block_delta(ev)
+
+        if et == "content_block_stop":
+            return self._on_block_stop(ev)
+
+        # message_delta / message_stop / etc. — nothing to surface
+        return []
+
+    def _on_block_start(self, ev: dict[str, Any]) -> list[SDKEvent]:
+        index = ev.get("index", 0)
+        cb = ev.get("content_block") or {}
+        cb_type = cb.get("type")
+
+        # Initialize state for this open block. Tool-use blocks need a buffer
+        # for the partial JSON deltas that follow.
+        self._open_blocks[index] = {
+            "type": cb_type,
+            "id": cb.get("id"),
+            "name": cb.get("name"),
+            "json_buf": "",
+        }
+
+        if cb_type == "text":
+            return [TextBlockStartEvent(
+                block_index=index, message_id=self._current_message_id,
+            )]
+        if cb_type == "thinking":
+            return [ThinkingBlockStartEvent(
+                block_index=index, message_id=self._current_message_id,
+            )]
+        # tool_use: don't emit until we have the full input on content_block_stop
+        return []
+
+    def _on_block_delta(self, ev: dict[str, Any]) -> list[SDKEvent]:
+        index = ev.get("index", 0)
+        delta = ev.get("delta") or {}
+        dt = delta.get("type")
+        block = self._open_blocks.get(index)
+
+        if dt == "text_delta":
+            return [TextDeltaEvent(
+                text=delta.get("text", ""),
+                block_index=index,
+                message_id=self._current_message_id,
+            )]
+        if dt == "thinking_delta":
+            return [ThinkingDeltaEvent(
+                thinking=delta.get("thinking", ""),
+                block_index=index,
+                message_id=self._current_message_id,
+            )]
+        if dt == "input_json_delta" and block is not None:
+            block["json_buf"] = block.get("json_buf", "") + (delta.get("partial_json") or "")
+        # signature_delta: not currently surfaced (cryptographic signature for
+        # thinking blocks; unused by the UI).
+        return []
+
+    def _on_block_stop(self, ev: dict[str, Any]) -> list[SDKEvent]:
+        index = ev.get("index", 0)
+        block = self._open_blocks.pop(index, None)
+        if block is None or block.get("type") != "tool_use":
+            return []
+
+        json_buf = block.get("json_buf") or ""
+        try:
+            parsed_input = json.loads(json_buf) if json_buf else {}
+        except json.JSONDecodeError:
+            parsed_input = {}
+
+        return [ToolUseEvent(
+            id=block.get("id") or "",
+            name=block.get("name") or "",
+            input=parsed_input if isinstance(parsed_input, dict) else {},
+            message_id=self._current_message_id,
+        )]
+
+
+def _translate_assistant_meta(msg: AssistantMessage) -> list[SDKEvent]:
+    """Forward only metadata from a buffered AssistantMessage.
+
+    Content blocks (text/thinking/tool_use) are skipped because they're already
+    produced by the streaming path. Tool result blocks, which sometimes appear
+    on synthetic AssistantMessages, are still translated.
+    """
     events: list[SDKEvent] = []
-    message_id = msg.uuid or msg.message_id or ""
-
     if msg.model or msg.usage:
         events.append(ModelInfoEvent(model=msg.model or "", usage=msg.usage or {}))
-
     for block in msg.content:
-        if isinstance(block, ThinkingBlock):
-            events.append(
-                ThinkingEvent(thinking=block.thinking, signature=block.signature, message_id=message_id)
-            )
-        elif isinstance(block, ToolUseBlock):
-            events.append(
-                ToolUseEvent(id=block.id, name=block.name, input=block.input, message_id=message_id)
-            )
-        elif isinstance(block, ToolResultBlock):
+        if isinstance(block, ToolResultBlock):
             content = block.content if isinstance(block.content, str) else str(block.content)
             events.append(
                 ToolResultEvent(tool_use_id=block.tool_use_id, content=content, is_error=block.is_error or False)
             )
-        elif isinstance(block, TextBlock):
-            events.append(
-                TextEvent(text=block.text, message_id=message_id)
-            )
-
     return events
 
 
@@ -276,6 +390,11 @@ class SDKManager:
             mcp_servers=_MCP_SERVERS,  # type: ignore[arg-type]
             hooks=hook_config["hooks"],
             env=_build_agent_env(),
+            # Stream raw Anthropic API events alongside the buffered
+            # AssistantMessage so the WS layer can forward text/thinking deltas
+            # to the UI as they arrive instead of buffering until each block is
+            # complete.
+            include_partial_messages=True,
         )
         if resume:
             options.resume = session_id
