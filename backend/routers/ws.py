@@ -64,6 +64,45 @@ async def _run_background_tasks(
     await asyncio.gather(do_title(), do_suggestions(), return_exceptions=True)
 
 
+async def _stream_turn(
+    websocket: WebSocket,
+    session: ChatSession,
+    conversation_id: UUID,
+    conversations: object,
+    content: str,
+    enriched: str | None,
+) -> None:
+    """Stream a single assistant turn to the websocket.
+
+    Runs as a background task so the main receive loop can process
+    concurrent control messages (e.g. interrupt) while the turn is in flight.
+    """
+    assistant_text = ""
+    turn_complete = False
+
+    try:
+        async for domain_event in session.handle_user_message(
+            content, prompt_override=enriched,
+        ):
+            if isinstance(domain_event, TextEvent):
+                assistant_text = domain_event.text
+            if isinstance(domain_event, ResultEvent):
+                turn_complete = True
+
+            for ws_msg in translate_event(domain_event):
+                await _send_json(websocket, ws_msg)
+    except Exception as e:
+        logger.error("SDK stream error: %s", traceback.format_exc())
+        await _send_json(websocket, ErrorWS(type="error", message=str(e)))
+
+    if turn_complete and assistant_text:
+        asyncio.create_task(
+            _run_background_tasks(
+                websocket, conversation_id, conversations, content, assistant_text,
+            )
+        )
+
+
 @router.websocket("/api/ws/{conversation_id}")
 async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None:
     await websocket.accept()
@@ -84,47 +123,32 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
         await websocket.close()
         return
 
+    stream_task: asyncio.Task[None] | None = None
+
     try:
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
 
             if msg_type == "user_message":
+                # Ignore if a turn is already streaming — UI disables send,
+                # but guard against races / misbehaving clients.
+                if stream_task is not None and not stream_task.done():
+                    continue
+
                 content = data.get("content", "").strip()
                 if not content:
                     continue
 
-                # Resolve file attachments and build enriched prompt
                 attachment_ids = data.get("attachment_ids", [])
                 enriched = _resolve_attachments(content, attachment_ids)
 
-                # Track assistant text for background tasks
-                assistant_text = ""
-                turn_complete = False
-
-                try:
-                    async for domain_event in session.handle_user_message(
-                        content, prompt_override=enriched,
-                    ):
-                        if isinstance(domain_event, TextEvent):
-                            assistant_text = domain_event.text
-                        if isinstance(domain_event, ResultEvent):
-                            turn_complete = True
-
-                        for ws_msg in translate_event(domain_event):
-                            await _send_json(websocket, ws_msg)
-                except Exception as e:
-                    logger.error("SDK stream error: %s", traceback.format_exc())
-                    await _send_json(websocket, ErrorWS(type="error", message=str(e)))
-
-                # Fire background tasks after turn completes
-                if turn_complete and assistant_text:
-                    asyncio.create_task(
-                        _run_background_tasks(
-                            websocket, conv_id, deps.conversations,
-                            content, assistant_text,
-                        )
+                stream_task = asyncio.create_task(
+                    _stream_turn(
+                        websocket, session, conv_id, deps.conversations,
+                        content, enriched,
                     )
+                )
 
             elif msg_type == "interrupt":
                 await session.handle_interrupt()
@@ -134,5 +158,10 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
     except Exception:
         logger.error("WebSocket error: %s", traceback.format_exc())
     finally:
+        if stream_task is not None and not stream_task.done():
+            try:
+                await asyncio.wait_for(stream_task, timeout=5.0)
+            except (TimeoutError, Exception):
+                stream_task.cancel()
         await session.save_pending_turn()
         await session.cleanup()

@@ -6,7 +6,9 @@ without needing a real database or SDK subprocess.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -14,6 +16,7 @@ from fastapi.testclient import TestClient
 from backend.domain.models import (
     MessageRole,
     ResultEvent,
+    SDKEvent,
     TextEvent,
     ThinkingEvent,
     ToolResultEvent,
@@ -142,6 +145,76 @@ class TestWebSocketEndpoint:
         assert saved[0].content["text"] == "hello"
         assert saved[1].role == MessageRole.ASSISTANT
         assert saved[1].content["text"] == "response"
+
+    def test_interrupt_reaches_sdk_while_stream_is_in_flight(self):
+        """Regression: interrupt frames sent mid-stream must be dispatched
+        concurrently, not queued behind the SDK iteration.
+
+        The fake client yields one event, then blocks its receive loop until
+        interrupt() is called. Without concurrent receive-loop handling, the
+        interrupt frame would sit in the WS buffer until the stream completed,
+        causing the stream to block forever — and this test would deadlock.
+        """
+
+        class BlockingUntilInterruptedClient(FakeSDKClient):
+            def __init__(self, before: list[SDKEvent], after: list[SDKEvent]) -> None:
+                super().__init__(events=[])
+                self._before = before
+                self._after = after
+                self._unblock = asyncio.Event()
+
+            async def interrupt(self) -> None:
+                self.interrupted = True
+                self._unblock.set()
+
+            async def receive_response(self) -> AsyncIterator[SDKEvent]:
+                for event in self._before:
+                    yield event
+                await self._unblock.wait()
+                for event in self._after:
+                    yield event
+
+        before = [TextEvent(text="partial", message_id="m1")]
+        after = [
+            ResultEvent(
+                session_id="s1", duration_ms=10, total_cost_usd=0.0,
+                num_turns=1, is_error=False,
+            ),
+        ]
+        fake_client = BlockingUntilInterruptedClient(before, after)
+
+        app = FastAPI()
+        app.include_router(ws.router)
+        conv_repo = FakeConversationRepository()
+        msg_repo = FakeMessageRepository()
+        app.state.deps = AppState(
+            users=FakeUserRepository(),
+            conversations=conv_repo,
+            messages=msg_repo,
+            sdk_factory=FakeSDKClientFactory(fake_client),
+        )
+        client = TestClient(app)
+        conv = asyncio.get_event_loop().run_until_complete(conv_repo.create())
+
+        with client.websocket_connect(f"/api/ws/{conv.id}") as ws_conn:
+            ws_conn.send_json({"type": "user_message", "content": "go"})
+
+            # First event streams before the blocking point.
+            first = ws_conn.receive_json()
+            assert first["type"] == "assistant_text"
+            assert first["text"] == "partial"
+
+            # Send interrupt while the stream is blocked inside receive_response.
+            # Without the fix, the server's receive loop is trapped in `async for`
+            # and never reads this frame, so the test would deadlock below.
+            ws_conn.send_json({"type": "interrupt"})
+
+            # After interrupt fires, the blocked stream unblocks and emits the
+            # remaining result event.
+            second = ws_conn.receive_json()
+            assert second["type"] == "result"
+
+        assert fake_client.interrupted is True
 
     def test_empty_message_is_ignored(self):
         events = [
