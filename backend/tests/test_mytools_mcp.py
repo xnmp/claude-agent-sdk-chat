@@ -39,18 +39,18 @@ class TestMytoolsServer:
     async def test_both_tools_are_registered(self) -> None:
         tools = await mcp.list_tools()
         names = {t.name for t in tools}
-        assert names == {"ping", "echo"}
+        assert names == {"ping", "get_weather"}
 
     async def test_ping_schema_has_no_arguments(self) -> None:
         tools = await mcp.list_tools()
         ping = next(t for t in tools if t.name == "ping")
         assert ping.inputSchema.get("properties") == {}
 
-    async def test_echo_schema_requires_message_string(self) -> None:
+    async def test_get_weather_schema_requires_location_string(self) -> None:
         tools = await mcp.list_tools()
-        echo = next(t for t in tools if t.name == "echo")
-        assert echo.inputSchema["required"] == ["message"]
-        assert echo.inputSchema["properties"]["message"]["type"] == "string"
+        weather = next(t for t in tools if t.name == "get_weather")
+        assert weather.inputSchema["required"] == ["location"]
+        assert weather.inputSchema["properties"]["location"]["type"] == "string"
 
     async def test_ping_returns_ok(self) -> None:
         result = await mcp.call_tool("ping", {})
@@ -59,9 +59,11 @@ class TestMytoolsServer:
         _content, structured = result
         assert structured == {"status": "ok"}
 
-    async def test_echo_returns_message(self) -> None:
-        _content, structured = await mcp.call_tool("echo", {"message": "hi"})
-        assert structured == {"echoed": "hi"}
+    async def test_get_weather_returns_location_and_weather(self) -> None:
+        _content, structured = await mcp.call_tool(
+            "get_weather", {"location": "sydney"}
+        )
+        assert structured == {"location": "sydney", "weather": "windy"}
 
 
 class TestSdkManagerWiring:
@@ -76,16 +78,17 @@ class TestSdkManagerWiring:
         assert "-m" in args
         assert "mytools.server" in args
 
-    async def test_allowed_tools_cover_every_server_tool(self) -> None:
-        # If a new tool is added to mytools/server.py without extending
-        # _MCP_ALLOWED_TOOLS, the agent will silently lose the ability to
-        # call it. This test forces the two to stay in sync.
-        registered = {t.name for t in await mcp.list_tools()}
-        allowed_suffixes = {t.split("__")[-1] for t in _MCP_ALLOWED_TOOLS}
-        missing = registered - allowed_suffixes
-        assert not missing, (
-            f"mytools.server exposes tools the agent is not allowed to call: {missing}"
-        )
+    def test_allowlist_is_derived_from_registered_servers(self) -> None:
+        # _MCP_ALLOWED_TOOLS must be a pure function of _MCP_SERVERS — one
+        # wildcard entry per registered server and nothing else. That's the
+        # contract that keeps "add a new MCP server" a one-liner instead of
+        # a two-file edit, and it's the only reason this file doesn't need
+        # to name individual tools.
+        expected = {f"mcp__{name}__*" for name in _MCP_SERVERS}
+        assert set(_MCP_ALLOWED_TOOLS) == expected
+        # Regression guard: the derivation must actually cover every server.
+        for name in _MCP_SERVERS:
+            assert f"mcp__{name}__*" in _MCP_ALLOWED_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -114,8 +117,8 @@ async def _collect(adapter) -> list[SDKEvent]:
 @pytest.mark.skipif(
     shutil.which("bwrap") is None, reason="bwrap not in PATH"
 )
-async def test_agent_can_invoke_mytools_ping(tmp_path, monkeypatch) -> None:
-    """End-to-end: agent runs mcp__mytools__ping through the stdio MCP server."""
+async def test_agent_can_invoke_mytools_get_weather(tmp_path, monkeypatch) -> None:
+    """End-to-end: agent runs mcp__mytools__get_weather through the stdio MCP server."""
     monkeypatch.setattr("backend.infra.sdk_manager.AGENT_CWD", str(tmp_path))
 
     # Pick a free port for the auth proxy so this can run alongside a dev server.
@@ -135,19 +138,24 @@ async def test_agent_can_invoke_mytools_ping(tmp_path, monkeypatch) -> None:
         await adapter.connect()
         try:
             await adapter.query(
-                "Call the `mcp__mytools__ping` tool exactly once, then stop. "
-                "Do not call any other tools."
+                "Use the get_weather tool to check the weather in Sydney, "
+                "then stop. Do not call any other tools."
             )
             events = await asyncio.wait_for(_collect(adapter), timeout=120)
         finally:
             await manager.remove(session_id)
 
         tool_uses = [e for e in events if isinstance(e, ToolUseEvent)]
-        ping_uses = [e for e in tool_uses if e.name == "mcp__mytools__ping"]
-        assert ping_uses, (
-            "Agent did not invoke mcp__mytools__ping. "
+        weather_uses = [e for e in tool_uses if e.name == "mcp__mytools__get_weather"]
+        assert weather_uses, (
+            "Agent did not invoke mcp__mytools__get_weather. "
             f"Tool uses seen: {[e.name for e in tool_uses]}"
         )
+        # Asserting on the argument proves the schema flowed all the way
+        # through to the model's tool-call — a stronger guarantee than ping
+        # (which has an empty argument schema).
+        assert "location" in weather_uses[0].input
+        assert "sydney" in str(weather_uses[0].input["location"]).lower()
 
         results = [e for e in events if isinstance(e, ResultEvent)]
         assert results, f"No ResultEvent in agent events: {events}"

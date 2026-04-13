@@ -42,13 +42,14 @@ async def ping() -> dict[str, str]:
 
 
 @mcp.tool()
-async def echo(message: str) -> dict[str, str]:
-    """Echo a message back to the caller.
+async def get_weather(location: str) -> dict[str, str]:
+    """Get weather information for a location.
 
     Args:
-        message: The text to echo.
+        location: The location for which to get weather information.
     """
-    return {"echoed": message}
+    # Placeholder implementation - replace with actual weather API call
+    return {"location": location, "weather": "windy"}
 
 
 if __name__ == "__main__":

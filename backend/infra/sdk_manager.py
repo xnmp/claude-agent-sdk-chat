@@ -55,9 +55,17 @@ _MCP_SERVERS: dict[str, dict[str, object]] = {
     },
 }
 
-# MCP tool names take the form `mcp__<server>__<tool>`. Each tool defined on a
-# registered MCP server must be listed here or the agent can't invoke it.
-_MCP_ALLOWED_TOOLS = ["mcp__mytools__ping", "mcp__mytools__echo"]
+# Derived from _MCP_SERVERS — every tool on every registered MCP server is
+# allowed via the `mcp__<server>__*` wildcard, so this file stays in sync
+# automatically. Adding a new server to _MCP_SERVERS above is the only
+# change needed to expose all of its tools to the agent; the per-tool names
+# and the allowlist never drift because there's no second list to author.
+#
+# (The CLI rule language has no `mcp__*__*` cross-server wildcard — the
+# matcher uses strict equality on the parsed server name — so a derivation
+# is the closest thing to "allow all MCP tools" that doesn't also bypass
+# Bash permission gates via permission_mode="bypassPermissions".)
+_MCP_ALLOWED_TOOLS: list[str] = [f"mcp__{name}__*" for name in _MCP_SERVERS]
 
 # Env vars safe to pass through to the agent subprocess.
 _ENV_ALLOWLIST = frozenset({
