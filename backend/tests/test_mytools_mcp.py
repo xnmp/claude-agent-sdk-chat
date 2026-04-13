@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import sys
 import uuid
 
 import pytest
@@ -96,14 +97,20 @@ class TestSdkManagerWiring:
 # ---------------------------------------------------------------------------
 
 
-integration_required = [
-    pytest.mark.skipif(
-        shutil.which("claude") is None, reason="claude CLI not in PATH"
-    ),
-    pytest.mark.skipif(
-        shutil.which("bwrap") is None, reason="bwrap not in PATH"
-    ),
-]
+# Platform-aware sandbox-runtime check. The CLI uses a different sandbox
+# implementation per OS and each has its own mandatory binary:
+#   - Linux uses bubblewrap (`bwrap`) + a seccomp filter.
+#   - macOS uses `/usr/bin/sandbox-exec` (seatbelt, built into the OS — the
+#     check is defensive; it should always pass on a normal macOS box).
+# Anything else (Windows, BSD, etc.) skips because the CLI doesn't sandbox
+# there at all, and this test exists specifically to exercise the sandboxed
+# Bash → MCP subprocess path.
+if sys.platform == "linux":
+    _SANDBOX_RUNTIME = "bwrap"
+elif sys.platform == "darwin":
+    _SANDBOX_RUNTIME = "sandbox-exec"
+else:
+    _SANDBOX_RUNTIME = None
 
 
 async def _collect(adapter) -> list[SDKEvent]:
@@ -115,7 +122,12 @@ async def _collect(adapter) -> list[SDKEvent]:
     shutil.which("claude") is None, reason="claude CLI not in PATH"
 )
 @pytest.mark.skipif(
-    shutil.which("bwrap") is None, reason="bwrap not in PATH"
+    _SANDBOX_RUNTIME is None,
+    reason=f"no supported sandbox runtime on {sys.platform}",
+)
+@pytest.mark.skipif(
+    _SANDBOX_RUNTIME is not None and shutil.which(_SANDBOX_RUNTIME) is None,
+    reason=f"{_SANDBOX_RUNTIME} not in PATH",
 )
 async def test_agent_can_invoke_mytools_get_weather(tmp_path, monkeypatch) -> None:
     """End-to-end: agent runs mcp__mytools__get_weather through the stdio MCP server."""
