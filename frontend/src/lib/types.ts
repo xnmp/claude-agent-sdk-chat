@@ -12,6 +12,12 @@ export interface Conversation {
 	updated_at: string;
 }
 
+// --- Block types -----------------------------------------------------------
+//
+// Assistant turns are an ordered sequence of blocks (text / thinking / tool
+// call). The discriminator is `kind`. Use `narrowBlock(b, "text")` etc. when
+// pattern-matching, so TypeScript knows which fields are available.
+
 export interface ThinkingEntry {
 	thinking: string;
 	signature: string;
@@ -25,14 +31,27 @@ export interface ToolCallEntry {
 	is_error: boolean | null;
 }
 
+export interface TextBlock {
+	kind: 'text';
+	text: string;
+}
+
+export interface ThinkingBlock extends ThinkingEntry {
+	kind: 'thinking';
+}
+
+export interface ToolCallBlock extends ToolCallEntry {
+	kind: 'tool_call';
+}
+
+export type Block = TextBlock | ThinkingBlock | ToolCallBlock;
+
 export interface UserContent {
 	text: string;
 }
 
 export interface AssistantContent {
-	thinking: ThinkingEntry[];
-	tool_calls: ToolCallEntry[];
-	text: string;
+	blocks: Block[];
 	model: string;
 	usage: Record<string, number>;
 	duration_ms: number;
@@ -68,10 +87,9 @@ export type WsMessage =
 	| { type: 'suggestions'; questions: string[] }
 	| { type: 'title_update'; title: string };
 
-// Live turn being streamed (not yet persisted)
+// Live turn being streamed (not yet persisted).
+// Mirrors AssistantContent's block-list shape so finalization is just a copy.
 export interface LiveTurn {
 	startedAt: number; // Date.now() when streaming began
-	thinking: ThinkingEntry[];
-	tool_calls: ToolCallEntry[];
-	text: string;
+	blocks: Block[];
 }

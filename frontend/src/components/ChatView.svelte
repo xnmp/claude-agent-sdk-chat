@@ -36,8 +36,7 @@
 	// Auto-scroll is a genuine DOM side effect — $effect is appropriate here
 	$effect(() => {
 		void messages.length;
-		void liveTurn?.text;
-		void liveTurn?.tool_calls.length;
+		void liveTurn?.blocks.length;
 
 		tick().then(() => {
 			if (scrollContainer) {

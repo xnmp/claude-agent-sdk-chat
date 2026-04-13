@@ -77,7 +77,7 @@ async def _stream_turn(
     Runs as a background task so the main receive loop can process
     concurrent control messages (e.g. interrupt) while the turn is in flight.
     """
-    assistant_text = ""
+    text_chunks: list[str] = []
     turn_complete = False
 
     try:
@@ -85,7 +85,7 @@ async def _stream_turn(
             content, prompt_override=enriched,
         ):
             if isinstance(domain_event, TextEvent):
-                assistant_text = domain_event.text
+                text_chunks.append(domain_event.text)
             if isinstance(domain_event, ResultEvent):
                 turn_complete = True
 
@@ -95,10 +95,11 @@ async def _stream_turn(
         logger.error("SDK stream error: %s", traceback.format_exc())
         await _send_json(websocket, ErrorWS(type="error", message=str(e)))
 
-    if turn_complete and assistant_text:
+    if turn_complete and text_chunks:
         asyncio.create_task(
             _run_background_tasks(
-                websocket, conversation_id, conversations, content, assistant_text,
+                websocket, conversation_id, conversations, content,
+                "\n\n".join(text_chunks),
             )
         )
 

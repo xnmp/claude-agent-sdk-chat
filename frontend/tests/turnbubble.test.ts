@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import TurnBubble from '../src/components/TurnBubble.svelte';
-import type { Message, AssistantContent, LiveTurn } from '$lib/types';
+import type { Block, Message, AssistantContent, LiveTurn } from '$lib/types';
 
 function userMessage(text: string): Message {
 	return {
@@ -20,9 +20,7 @@ function assistantMessage(overrides: Partial<AssistantContent> = {}): Message {
 		conversation_id: 'conv-1',
 		role: 'assistant',
 		content: {
-			thinking: [],
-			tool_calls: [],
-			text: 'Response text',
+			blocks: [{ kind: 'text', text: 'Response text' }],
 			model: 'claude-sonnet-4-20250514',
 			usage: {},
 			duration_ms: 1500,
@@ -47,9 +45,51 @@ describe('TurnBubble', () => {
 		expect(container.querySelector('.user-bubble')).toBeTruthy();
 	});
 
-	it('renders assistant response text', () => {
-		render(TurnBubble, { props: { message: assistantMessage({ text: 'The answer is 42' }) } });
+	it('renders assistant text block', () => {
+		render(TurnBubble, {
+			props: {
+				message: assistantMessage({
+					blocks: [{ kind: 'text', text: 'The answer is 42' }]
+				})
+			}
+		});
 		expect(screen.getByText('The answer is 42')).toBeInTheDocument();
+	});
+
+	it('renders interleaved text blocks in order', () => {
+		// Regression: a turn with text → tool → text used to drop the first text.
+		const blocks: Block[] = [
+			{ kind: 'text', text: 'let me check' },
+			{
+				kind: 'tool_call',
+				id: 't1',
+				name: 'Read',
+				input: { file_path: '/tmp/x' },
+				result: 'contents',
+				is_error: false
+			},
+			{ kind: 'text', text: 'all set' }
+		];
+		const { container } = render(TurnBubble, {
+			props: { message: assistantMessage({ blocks }) }
+		});
+
+		// Both text blocks survive (regression: previously only the last did).
+		const textBlocks = container.querySelectorAll('.response-text');
+		expect(textBlocks).toHaveLength(2);
+		expect(textBlocks[0].textContent).toContain('let me check');
+		expect(textBlocks[1].textContent).toContain('all set');
+
+		// Order: text → tool → text. Index of the tool call must lie between
+		// the two text blocks in the DOM.
+		const toolCall = container.querySelector('.tool-call');
+		expect(toolCall).not.toBeNull();
+		const all = Array.from(container.querySelectorAll('.response-text, .tool-call'));
+		expect(all.map((el) => el.classList.contains('tool-call'))).toEqual([
+			false,
+			true,
+			false
+		]);
 	});
 
 	it('renders cost and duration metadata', () => {
@@ -67,62 +107,68 @@ describe('TurnBubble', () => {
 		expect(container.querySelector('.meta')).toBeNull();
 	});
 
-	it('shows tool call toggle when tool calls present', () => {
+	it('renders inline tool call alongside text', () => {
 		render(TurnBubble, {
 			props: {
 				message: assistantMessage({
-					tool_calls: [
-						{ id: 't1', name: 'Read', input: {}, result: 'ok', is_error: false }
+					blocks: [
+						{ kind: 'text', text: 'reading the file' },
+						{
+							kind: 'tool_call',
+							id: 't1',
+							name: 'Read',
+							input: {},
+							result: 'ok',
+							is_error: false
+						}
 					]
 				})
 			}
 		});
-		expect(screen.getByText(/1 tool call$/)).toBeInTheDocument();
+		expect(screen.getByText('reading the file')).toBeInTheDocument();
+		expect(screen.getByText('Read')).toBeInTheDocument();
 	});
 
-	it('pluralizes tool call count correctly', () => {
-		render(TurnBubble, {
-			props: {
-				message: assistantMessage({
-					tool_calls: [
-						{ id: 't1', name: 'Read', input: {}, result: 'ok', is_error: false },
-						{ id: 't2', name: 'Grep', input: {}, result: 'ok', is_error: false }
-					]
-				})
-			}
-		});
-		expect(screen.getByText(/2 tool calls$/)).toBeInTheDocument();
-	});
-
-	it('shows streaming indicator for live turn without text', () => {
-		const liveTurn: LiveTurn = { startedAt: Date.now(), thinking: [], tool_calls: [], text: '' };
+	it('shows streaming dots for live turn with no blocks', () => {
+		const liveTurn: LiveTurn = { startedAt: Date.now(), blocks: [] };
 		const { container } = render(TurnBubble, {
 			props: { liveTurn, isLive: true }
 		});
 		expect(container.querySelectorAll('.dot')).toHaveLength(3);
 	});
 
-	it('shows text for live turn with text', () => {
-		const liveTurn: LiveTurn = { startedAt: Date.now(), thinking: [], tool_calls: [], text: 'Streaming...' };
+	it('shows text for live turn with text block', () => {
+		const liveTurn: LiveTurn = {
+			startedAt: Date.now(),
+			blocks: [{ kind: 'text', text: 'Streaming...' }]
+		};
 		render(TurnBubble, { props: { liveTurn, isLive: true } });
 		expect(screen.getByText('Streaming...')).toBeInTheDocument();
 	});
 
-	it('expands tool calls on toggle click', async () => {
+	it('expands tool call details on click', async () => {
 		const user = userEvent.setup();
 		render(TurnBubble, {
 			props: {
 				message: assistantMessage({
-					tool_calls: [
-						{ id: 't1', name: 'Read', input: { file_path: '/tmp/x' }, result: 'contents', is_error: false }
+					blocks: [
+						{
+							kind: 'tool_call',
+							id: 't1',
+							name: 'Read',
+							input: { file_path: '/tmp/x' },
+							result: 'contents',
+							is_error: false
+						}
 					]
 				})
 			}
 		});
 
-		await user.click(screen.getByText(/1 tool call$/));
-		// After expanding, the tool name should be visible inside sub-messages
-		expect(screen.getByText('Read')).toBeInTheDocument();
+		// Click the <details> summary to expand
+		await user.click(screen.getByText('Read'));
+		// Once expanded the input/output sections appear
+		expect(screen.getByText('Input')).toBeInTheDocument();
 	});
 
 	it('renders download links for created files', () => {

@@ -17,6 +17,8 @@ from backend.domain.models import (
     ThinkingEvent,
     ToolResultEvent,
     ToolUseEvent,
+    text_blocks,
+    tool_call_blocks,
 )
 from backend.tests.fakes import (
     FakeConversationRepository,
@@ -89,7 +91,7 @@ class TestChatSessionHandleMessage:
         msgs = await msg_repo.list(session.conversation_id)
         user_msgs = [m for m in msgs if m.role == MessageRole.USER]
         assert len(user_msgs) == 1
-        assert user_msgs[0].content["text"] == "hello"
+        assert user_msgs[0].content["text"] == "hello"  # type: ignore[typeddict-item]
 
     async def test_persists_assistant_turn_on_result(
         self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,
@@ -103,9 +105,9 @@ class TestChatSessionHandleMessage:
         assistant_msgs = [m for m in msgs if m.role == MessageRole.ASSISTANT]
         assert len(assistant_msgs) == 1
         content: AssistantMessageContent = assistant_msgs[0].content  # type: ignore[assignment]
-        assert content["text"] == "The file contains a hello world program."
         assert content["duration_ms"] == 1500
-        assert len(content["tool_calls"]) == 1
+        assert len(tool_call_blocks(content["blocks"])) == 1
+        assert text_blocks(content["blocks"])[-1]["text"] == "The file contains a hello world program."
 
     async def test_yields_domain_events_in_order(
         self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,
@@ -321,7 +323,7 @@ class TestChatSessionDisconnect:
         assistant_msgs = [m for m in msgs if m.role == MessageRole.ASSISTANT]
         assert len(assistant_msgs) == 1
         content: AssistantMessageContent = assistant_msgs[0].content  # type: ignore[assignment]
-        assert content["text"] == "partial answer"
+        assert text_blocks(content["blocks"])[0]["text"] == "partial answer"
 
     async def test_save_pending_turn_noop_if_already_persisted(
         self, conv_repo: FakeConversationRepository, msg_repo: FakeMessageRepository,

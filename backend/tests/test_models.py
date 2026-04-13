@@ -10,27 +10,37 @@ from backend.domain.models import (
     ThinkingEvent,
     ToolResultEvent,
     ToolUseEvent,
+    normalize_assistant_content,
+    text_blocks,
+    thinking_blocks,
+    tool_call_blocks,
 )
 
 
+def _kinds(blocks: list) -> list[str]:
+    return [b["kind"] for b in blocks]
+
+
 class TestAssistantTurnProcess:
-    def test_accumulates_thinking(self):
+    def test_appends_thinking_blocks_in_order(self):
         turn = AssistantTurn()
         turn.process(ThinkingEvent(thinking="step 1", signature="sig-a", message_id="m1"))
         turn.process(ThinkingEvent(thinking="step 2", signature="sig-b", message_id="m1"))
 
-        assert len(turn.thinking) == 2
-        assert turn.thinking[0]["thinking"] == "step 1"
-        assert turn.thinking[1]["signature"] == "sig-b"
+        assert _kinds(turn.blocks) == ["thinking", "thinking"]
+        thoughts = thinking_blocks(turn.blocks)
+        assert thoughts[0]["thinking"] == "step 1"
+        assert thoughts[1]["signature"] == "sig-b"
 
-    def test_accumulates_tool_use(self):
+    def test_appends_tool_use(self):
         turn = AssistantTurn()
         turn.process(ToolUseEvent(id="t1", name="Read", input={"file_path": "/x"}, message_id="m1"))
 
-        assert len(turn.tool_calls) == 1
-        assert turn.tool_calls[0]["name"] == "Read"
-        assert turn.tool_calls[0]["input"] == {"file_path": "/x"}
-        assert turn.tool_calls[0]["result"] is None
+        assert _kinds(turn.blocks) == ["tool_call"]
+        tools = tool_call_blocks(turn.blocks)
+        assert tools[0]["name"] == "Read"
+        assert tools[0]["input"] == {"file_path": "/x"}
+        assert tools[0]["result"] is None
 
     def test_tool_result_backfills_matching_tool_call(self):
         turn = AssistantTurn()
@@ -38,23 +48,48 @@ class TestAssistantTurnProcess:
         turn.process(ToolUseEvent(id="t2", name="Grep", input={}, message_id="m1"))
         turn.process(ToolResultEvent(tool_use_id="t1", content="file contents", is_error=False))
 
-        assert turn.tool_calls[0]["result"] == "file contents"
-        assert turn.tool_calls[0]["is_error"] is False
+        tools = tool_call_blocks(turn.blocks)
+        assert tools[0]["result"] == "file contents"
+        assert tools[0]["is_error"] is False
         # t2 is unaffected
-        assert turn.tool_calls[1]["result"] is None
+        assert tools[1]["result"] is None
 
     def test_tool_result_for_unknown_id_is_silent(self):
         turn = AssistantTurn()
         # Should not raise — unknown tool IDs are ignored
         turn.process(ToolResultEvent(tool_use_id="nonexistent", content="x", is_error=False))
-        assert turn.tool_calls == []
+        assert turn.blocks == []
 
-    def test_text_event_overwrites_previous(self):
+    def test_text_blocks_are_preserved_in_order(self):
+        """Multiple text blocks in one turn must all survive (regression: previously
+        each TextEvent overwrote the prior one, losing the model's narrative)."""
         turn = AssistantTurn()
         turn.process(TextEvent(text="draft", message_id="m1"))
         turn.process(TextEvent(text="final answer", message_id="m2"))
 
-        assert turn.text == "final answer"
+        texts = text_blocks(turn.blocks)
+        assert [b["text"] for b in texts] == ["draft", "final answer"]
+
+    def test_interleaved_text_and_tool_calls_preserve_order(self):
+        """A turn like text → tool → text → tool → text keeps the original sequence."""
+        turn = AssistantTurn()
+        turn.process(TextEvent(text="let me check", message_id="m1"))
+        turn.process(ToolUseEvent(id="t1", name="Read", input={}, message_id="m1"))
+        turn.process(ToolResultEvent(tool_use_id="t1", content="ok", is_error=False))
+        turn.process(TextEvent(text="now editing", message_id="m2"))
+        turn.process(ToolUseEvent(id="t2", name="Edit", input={}, message_id="m2"))
+        turn.process(ToolResultEvent(tool_use_id="t2", content="done", is_error=False))
+        turn.process(TextEvent(text="all set", message_id="m3"))
+
+        assert _kinds(turn.blocks) == [
+            "text", "tool_call", "text", "tool_call", "text",
+        ]
+        texts = text_blocks(turn.blocks)
+        assert [b["text"] for b in texts] == ["let me check", "now editing", "all set"]
+        # tool results landed on the right calls, in order
+        tools = tool_call_blocks(turn.blocks)
+        assert tools[0]["result"] == "ok"
+        assert tools[1]["result"] == "done"
 
     def test_model_info_preserves_existing_model_when_empty(self):
         turn = AssistantTurn()
@@ -74,21 +109,87 @@ class TestAssistantTurnToContent:
         content = turn.to_content()
 
         assert content["model"] == "claude-sonnet-4-20250514"
-        assert content["text"] == "The file contains a hello world program."
         assert content["duration_ms"] == 1500
         assert content["total_cost_usd"] == 0.003
-        assert len(content["thinking"]) == 1
-        assert content["thinking"][0]["thinking"] == "Let me read the file..."
-        assert len(content["tool_calls"]) == 1
-        assert content["tool_calls"][0]["name"] == "Read"
-        assert content["tool_calls"][0]["result"] == "print('hello')"
+
+        # Sample sequence: ThinkingEvent → ToolUseEvent → ToolResultEvent → TextEvent
+        # Result: thinking block, tool_call block (with result filled), text block
+        assert _kinds(content["blocks"]) == ["thinking", "tool_call", "text"]
+        assert thinking_blocks(content["blocks"])[0]["thinking"] == "Let me read the file..."
+        tool = tool_call_blocks(content["blocks"])[0]
+        assert tool["name"] == "Read"
+        assert tool["result"] == "print('hello')"
+        assert text_blocks(content["blocks"])[0]["text"] == "The file contains a hello world program."
 
     def test_empty_turn_produces_valid_content(self):
         content = AssistantTurn().to_content()
 
-        assert content["text"] == ""
-        assert content["thinking"] == []
-        assert content["tool_calls"] == []
+        assert content["blocks"] == []
         assert content["model"] == ""
         assert content["duration_ms"] == 0
         assert content["total_cost_usd"] == 0.0
+
+
+class TestNormalizeAssistantContent:
+    def test_passes_through_new_shape(self):
+        raw = {
+            "blocks": [
+                {"kind": "text", "text": "hi"},
+            ],
+            "model": "claude",
+            "usage": {"input_tokens": 1},
+            "duration_ms": 100,
+            "total_cost_usd": 0.001,
+            "created_files": [],
+        }
+        normalized = normalize_assistant_content(raw)
+
+        assert normalized["blocks"] == [{"kind": "text", "text": "hi"}]
+        assert normalized["model"] == "claude"
+
+    def test_legacy_shape_reconstructs_blocks_in_render_order(self):
+        """Legacy rows lose interleaving info — reconstruct as thinking → tools → text,
+        which matches how the legacy UI displayed them."""
+        raw = {
+            "thinking": [{"thinking": "hmm", "signature": "s"}],
+            "tool_calls": [
+                {"id": "t1", "name": "Read", "input": {"file_path": "/x"},
+                 "result": "contents", "is_error": False},
+            ],
+            "text": "the answer",
+            "model": "claude-sonnet-4-20250514",
+            "usage": {"output_tokens": 50},
+            "duration_ms": 1500,
+            "total_cost_usd": 0.003,
+        }
+        normalized = normalize_assistant_content(raw)
+
+        assert _kinds(normalized["blocks"]) == ["thinking", "tool_call", "text"]
+        assert thinking_blocks(normalized["blocks"])[0]["thinking"] == "hmm"
+        tool = tool_call_blocks(normalized["blocks"])[0]
+        assert tool["name"] == "Read"
+        assert tool["result"] == "contents"
+        assert text_blocks(normalized["blocks"])[0]["text"] == "the answer"
+        assert normalized["model"] == "claude-sonnet-4-20250514"
+        assert normalized["duration_ms"] == 1500
+
+    def test_legacy_with_empty_text_omits_text_block(self):
+        raw = {
+            "thinking": [],
+            "tool_calls": [{"id": "t1", "name": "Bash", "input": {},
+                            "result": "ok", "is_error": False}],
+            "text": "",
+            "model": "", "usage": {}, "duration_ms": 0, "total_cost_usd": 0.0,
+        }
+        normalized = normalize_assistant_content(raw)
+
+        assert _kinds(normalized["blocks"]) == ["tool_call"]
+
+    def test_legacy_empty_turn_yields_empty_blocks(self):
+        raw = {
+            "thinking": [], "tool_calls": [], "text": "",
+            "model": "", "usage": {}, "duration_ms": 0, "total_cost_usd": 0.0,
+        }
+        normalized = normalize_assistant_content(raw)
+
+        assert normalized["blocks"] == []

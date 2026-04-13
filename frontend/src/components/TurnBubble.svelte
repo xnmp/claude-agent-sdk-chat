@@ -1,9 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import type { Message, UserContent, AssistantContent, LiveTurn } from '$lib/types';
+	import type { Block, Message, UserContent, AssistantContent, LiveTurn, ToolCallBlock } from '$lib/types';
 	import type { Settings } from '$lib/settings';
 	import { renderMarkdown } from '$lib/markdown';
-	import ThinkingBlock from './ThinkingBlock.svelte';
 	import ToolCall from './ToolCall.svelte';
 
 	let {
@@ -35,15 +33,21 @@
 	let userContent = $derived(isUser ? (message?.content as UserContent) : null);
 	let assistantContent = $derived(!isUser && message ? (message.content as AssistantContent) : null);
 
-	let liveHasThinking = $derived(liveTurn ? liveTurn.thinking.length > 0 : false);
-	let liveToolCount = $derived(liveTurn ? liveTurn.tool_calls.length : 0);
-	let liveHasSubMessages = $derived(liveHasThinking || liveToolCount > 0);
+	// Source of truth for the block list, regardless of live vs persisted.
+	let blocks = $derived<Block[]>(
+		isLive && liveTurn ? liveTurn.blocks : (assistantContent?.blocks ?? [])
+	);
 
-	let hasThinking = $derived(assistantContent ? assistantContent.thinking.length > 0 : false);
-	let toolCallCount = $derived(assistantContent ? assistantContent.tool_calls.length : 0);
-	let hasSubMessages = $derived(hasThinking || toolCallCount > 0);
-
-	let showSubMessages = $state(false);
+	// Show a streaming dot indicator only when streaming and the model hasn't
+	// emitted any text or tool yet.
+	let showStreamingDots = $derived(isLive && blocks.length === 0);
+	let lastToolCall = $derived.by((): ToolCallBlock | null => {
+		for (let i = blocks.length - 1; i >= 0; i--) {
+			const b = blocks[i];
+			if (b.kind === 'tool_call') return b;
+		}
+		return null;
+	});
 </script>
 
 {#if isUser && userContent}
@@ -52,91 +56,53 @@
 			<p>{userContent.text}</p>
 		</div>
 	</div>
-{:else if isLive && liveTurn}
+{:else if isLive || assistantContent}
 	<div class="turn assistant-turn">
 		<div class="bubble assistant-bubble">
-			{#if liveHasSubMessages}
-				<button class="toggle-sub" onclick={() => (showSubMessages = !showSubMessages)}>
-					<svg class="toggle-icon" class:open={showSubMessages} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-						<polyline points="4,2 8,6 4,10" />
-					</svg>
-					{#if liveHasThinking && liveToolCount === 0}
-						Thinking...
-					{:else if liveHasThinking && liveToolCount > 0}
-						Thought &middot; {liveToolCount} tool call{liveToolCount !== 1 ? 's' : ''}
-					{:else}
-						{liveToolCount} tool call{liveToolCount !== 1 ? 's' : ''}
-					{/if}
-				</button>
-
-				{#if showSubMessages}
-					<div class="sub-messages">
-						{#if liveHasThinking}
-							<ThinkingBlock entries={liveTurn.thinking} />
-						{/if}
-						{#each liveTurn.tool_calls as tool (tool.id)}
-							<ToolCall {tool} />
-						{/each}
-					</div>
+			{#each blocks as block, idx (idx)}
+				{#if block.kind === 'text'}
+					<div class="response-text markdown">{@html renderMarkdown(block.text)}</div>
+				{:else if block.kind === 'thinking'}
+					<details class="thinking-block">
+						<summary>
+							<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+								<circle cx="7" cy="7" r="5.5" />
+								<path d="M5.5 5.5C5.5 4.67 6.17 4 7 4C7.83 4 8.5 4.67 8.5 5.5C8.5 6.33 7.83 7 7 7V8" />
+								<circle cx="7" cy="9.5" r="0.5" fill="currentColor" />
+							</svg>
+							Thinking
+						</summary>
+						<pre>{block.thinking}</pre>
+					</details>
+				{:else if block.kind === 'tool_call'}
+					<ToolCall tool={block} />
 				{/if}
-			{/if}
+			{/each}
 
-			{#if liveTurn.text}
-				<div class="response-text markdown">{@html renderMarkdown(liveTurn.text)}</div>
-			{:else}
+			{#if showStreamingDots}
 				<div class="streaming-indicator">
 					<span class="dot"></span>
 					<span class="dot"></span>
 					<span class="dot"></span>
-					{#if liveTurn.tool_calls.length > 0}
-						{@const lastTool = liveTurn.tool_calls[liveTurn.tool_calls.length - 1]}
-						{@const desc = lastTool.input?.description as string | undefined}
-						<span class="streaming-status">{desc || lastTool.name}{lastTool.result === null ? '...' : ''}</span>
-					{/if}
+				</div>
+			{:else if isLive && lastToolCall && lastToolCall.result === null}
+				<div class="streaming-indicator">
+					<span class="dot"></span>
+					<span class="dot"></span>
+					<span class="dot"></span>
+					<span class="streaming-status">
+						{(typeof lastToolCall.input?.description === 'string'
+							? lastToolCall.input.description
+							: lastToolCall.name)}...
+					</span>
 				</div>
 			{/if}
 
-			{#if settings.showDuration && elapsedMs > 0}
+			{#if isLive && settings.showDuration && elapsedMs > 0}
 				<div class="meta">
 					<span>{(elapsedMs / 1000).toFixed(1)}s</span>
 				</div>
-			{/if}
-		</div>
-	</div>
-{:else if assistantContent}
-	<div class="turn assistant-turn">
-		<div class="bubble assistant-bubble">
-			{#if hasSubMessages}
-				<button class="toggle-sub" onclick={() => (showSubMessages = !showSubMessages)}>
-					<svg class="toggle-icon" class:open={showSubMessages} width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-						<polyline points="4,2 8,6 4,10" />
-					</svg>
-					{#if hasThinking && toolCallCount === 0}
-						Thought
-					{:else if hasThinking && toolCallCount > 0}
-						Thought &middot; {toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
-					{:else}
-						{toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
-					{/if}
-				</button>
-
-				{#if showSubMessages}
-					<div class="sub-messages">
-						{#if hasThinking}
-							<ThinkingBlock entries={assistantContent.thinking} />
-						{/if}
-						{#each assistantContent.tool_calls as tool (tool.id)}
-							<ToolCall {tool} />
-						{/each}
-					</div>
-				{/if}
-			{/if}
-
-			{#if assistantContent.text}
-				<div class="response-text markdown">{@html renderMarkdown(assistantContent.text)}</div>
-			{/if}
-
-			{#if (settings.showCost && assistantContent.total_cost_usd > 0) || (settings.showDuration && assistantContent.duration_ms > 0)}
+			{:else if assistantContent && ((settings.showCost && assistantContent.total_cost_usd > 0) || (settings.showDuration && assistantContent.duration_ms > 0))}
 				<div class="meta">
 					{#if settings.showCost && assistantContent.total_cost_usd > 0}
 						<span>${assistantContent.total_cost_usd.toFixed(4)}</span>
@@ -150,7 +116,7 @@
 				</div>
 			{/if}
 
-			{#if assistantContent.created_files && assistantContent.created_files.length > 0}
+			{#if assistantContent && assistantContent.created_files && assistantContent.created_files.length > 0}
 				<div class="created-files">
 					<span class="files-label">Files:</span>
 					{#each assistantContent.created_files as file}
@@ -301,39 +267,50 @@
 		margin: 0.8em 0;
 	}
 
-	/* Tool call toggle */
-	.toggle-sub {
-		display: inline-flex;
+	/* Per-block spacing — each block gets a margin so interleaved text and
+	   tool calls don't collapse into each other. */
+	.bubble > :global(.response-text + .response-text),
+	.bubble > :global(.response-text + .tool-call),
+	.bubble > :global(.tool-call + .response-text),
+	.bubble > :global(.tool-call + .tool-call),
+	.bubble > :global(.thinking-block + .response-text),
+	.bubble > :global(.response-text + .thinking-block),
+	.bubble > :global(.tool-call + .thinking-block),
+	.bubble > :global(.thinking-block + .tool-call) {
+		margin-top: 10px;
+	}
+
+	/* Inline thinking block — collapsed by default, click to expand. */
+	.thinking-block {
+		border-radius: var(--radius);
+		background: var(--thinking-bg);
+		border: 1px solid var(--thinking-border);
+		overflow: hidden;
+	}
+
+	.thinking-block summary {
+		display: flex;
 		align-items: center;
-		gap: 5px;
+		gap: 6px;
+		padding: 8px 12px;
 		font-size: 0.8125rem;
 		font-weight: 500;
-		color: var(--accent);
-		padding: 4px 8px;
-		margin: -2px -8px 6px;
-		border-radius: var(--radius-sm);
-		transition: background 0.12s ease;
+		color: var(--text-muted);
+		cursor: pointer;
+		user-select: none;
 	}
 
-	.toggle-sub:hover {
-		background: var(--accent-subtle);
-	}
+	.thinking-block summary::-webkit-details-marker { display: none; }
+	.thinking-block summary::marker { content: ''; }
 
-	.toggle-icon {
-		transition: transform 0.15s ease;
-	}
-
-	.toggle-icon.open {
-		transform: rotate(90deg);
-	}
-
-	.sub-messages {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		margin-bottom: 12px;
-		padding-bottom: 12px;
-		border-bottom: 1px solid var(--border);
+	.thinking-block pre {
+		padding: 0 12px 12px;
+		white-space: pre-wrap;
+		word-break: break-word;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		line-height: 1.6;
+		margin: 0;
 	}
 
 	/* Meta info */
