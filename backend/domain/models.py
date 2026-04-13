@@ -206,7 +206,46 @@ class ToolResultEvent:
 
 @dataclass(frozen=True)
 class TextEvent:
+    """A complete text block — used by tests/fakes and as a non-streaming fallback.
+
+    The production SDK adapter emits TextBlockStartEvent + TextDeltaEvent for live
+    streaming instead of one of these.
+    """
     text: str
+    message_id: str
+
+
+@dataclass(frozen=True)
+class TextBlockStartEvent:
+    """Marks the beginning of a text content block when the SDK is in streaming mode.
+
+    The block accumulator opens an empty text block; subsequent TextDeltaEvent
+    instances grow it.
+    """
+    block_index: int
+    message_id: str
+
+
+@dataclass(frozen=True)
+class TextDeltaEvent:
+    """An incremental text fragment for the most recently opened text block."""
+    text: str
+    block_index: int
+    message_id: str
+
+
+@dataclass(frozen=True)
+class ThinkingBlockStartEvent:
+    """Marks the beginning of an extended-thinking block in streaming mode."""
+    block_index: int
+    message_id: str
+
+
+@dataclass(frozen=True)
+class ThinkingDeltaEvent:
+    """An incremental thinking fragment for the most recently opened thinking block."""
+    thinking: str
+    block_index: int
     message_id: str
 
 
@@ -227,7 +266,18 @@ class ResultEvent:
     created_files: list[str] = field(default_factory=list)
 
 
-SDKEvent = ThinkingEvent | ToolUseEvent | ToolResultEvent | TextEvent | ModelInfoEvent | ResultEvent
+SDKEvent = (
+    ThinkingEvent
+    | ToolUseEvent
+    | ToolResultEvent
+    | TextEvent
+    | TextBlockStartEvent
+    | TextDeltaEvent
+    | ThinkingBlockStartEvent
+    | ThinkingDeltaEvent
+    | ModelInfoEvent
+    | ResultEvent
+)
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +308,21 @@ class AssistantTurn:
                 self.blocks.append(ThinkingBlockEntry(
                     kind="thinking", thinking=t, signature=s,
                 ))
+            case ThinkingBlockStartEvent():
+                self.blocks.append(ThinkingBlockEntry(
+                    kind="thinking", thinking="", signature="",
+                ))
+            case ThinkingDeltaEvent(thinking=t):
+                # Append to the last thinking block if it's still open. If for any
+                # reason the previous block isn't a thinking block, start a fresh
+                # one — defensive against out-of-order or dropped start events.
+                last = self.blocks[-1] if self.blocks else None
+                if last is not None and last.get("kind") == "thinking":
+                    last["thinking"] = last.get("thinking", "") + t  # type: ignore[typeddict-item]
+                else:
+                    self.blocks.append(ThinkingBlockEntry(
+                        kind="thinking", thinking=t, signature="",
+                    ))
             case ToolUseEvent(id=tool_id, name=name, input=inp):
                 self.blocks.append(ToolCallBlockEntry(
                     kind="tool_call", id=tool_id, name=name, input=inp,
@@ -271,6 +336,14 @@ class AssistantTurn:
                         break
             case TextEvent(text=t):
                 self.blocks.append(TextBlockEntry(kind="text", text=t))
+            case TextBlockStartEvent():
+                self.blocks.append(TextBlockEntry(kind="text", text=""))
+            case TextDeltaEvent(text=t):
+                last = self.blocks[-1] if self.blocks else None
+                if last is not None and last.get("kind") == "text":
+                    last["text"] = last.get("text", "") + t  # type: ignore[typeddict-item]
+                else:
+                    self.blocks.append(TextBlockEntry(kind="text", text=t))
             case ModelInfoEvent(model=m, usage=u):
                 self.model = m or self.model
                 if u:

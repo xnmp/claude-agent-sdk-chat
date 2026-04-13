@@ -6,7 +6,11 @@ from backend.domain.models import (
     AssistantTurn,
     ModelInfoEvent,
     ResultEvent,
+    TextBlockStartEvent,
+    TextDeltaEvent,
     TextEvent,
+    ThinkingBlockStartEvent,
+    ThinkingDeltaEvent,
     ThinkingEvent,
     ToolResultEvent,
     ToolUseEvent,
@@ -90,6 +94,64 @@ class TestAssistantTurnProcess:
         tools = tool_call_blocks(turn.blocks)
         assert tools[0]["result"] == "ok"
         assert tools[1]["result"] == "done"
+
+    def test_text_delta_appends_to_open_text_block(self):
+        """A typical streaming sequence: start opens an empty text block;
+        deltas grow it character-by-character."""
+        turn = AssistantTurn()
+        turn.process(TextBlockStartEvent(block_index=0, message_id="m1"))
+        for chunk in ["He", "llo", ", world!"]:
+            turn.process(TextDeltaEvent(text=chunk, block_index=0, message_id="m1"))
+
+        assert _kinds(turn.blocks) == ["text"]
+        assert text_blocks(turn.blocks)[0]["text"] == "Hello, world!"
+
+    def test_text_delta_starts_a_new_block_after_a_tool_call(self):
+        """Two text blocks separated by a tool call render in order, with the
+        second text block growing from its own deltas without disturbing the
+        first."""
+        turn = AssistantTurn()
+        turn.process(TextBlockStartEvent(block_index=0, message_id="m1"))
+        turn.process(TextDeltaEvent(text="let me check", block_index=0, message_id="m1"))
+        turn.process(ToolUseEvent(id="t1", name="Read", input={}, message_id="m1"))
+        turn.process(ToolResultEvent(tool_use_id="t1", content="ok", is_error=False))
+        turn.process(TextBlockStartEvent(block_index=2, message_id="m1"))
+        turn.process(TextDeltaEvent(text="all done", block_index=2, message_id="m1"))
+
+        assert _kinds(turn.blocks) == ["text", "tool_call", "text"]
+        texts = text_blocks(turn.blocks)
+        assert [b["text"] for b in texts] == ["let me check", "all done"]
+
+    def test_text_delta_without_a_preceding_start_creates_a_block(self):
+        """Defensive: if a delta arrives without a paired start (out-of-order
+        SDK delivery, dropped frame), we still capture the text rather than
+        silently losing it."""
+        turn = AssistantTurn()
+        turn.process(TextDeltaEvent(text="orphan", block_index=0, message_id="m1"))
+
+        assert _kinds(turn.blocks) == ["text"]
+        assert text_blocks(turn.blocks)[0]["text"] == "orphan"
+
+    def test_thinking_delta_appends_to_open_thinking_block(self):
+        turn = AssistantTurn()
+        turn.process(ThinkingBlockStartEvent(block_index=0, message_id="m1"))
+        for chunk in ["Let ", "me ", "think..."]:
+            turn.process(ThinkingDeltaEvent(thinking=chunk, block_index=0, message_id="m1"))
+
+        thoughts = thinking_blocks(turn.blocks)
+        assert len(thoughts) == 1
+        assert thoughts[0]["thinking"] == "Let me think..."
+
+    def test_streaming_text_then_legacy_text_event_coexist(self):
+        """Mixed mode: delta-driven text from streaming alongside a complete
+        TextEvent (used by tests / non-streaming fallback)."""
+        turn = AssistantTurn()
+        turn.process(TextBlockStartEvent(block_index=0, message_id="m1"))
+        turn.process(TextDeltaEvent(text="streamed", block_index=0, message_id="m1"))
+        turn.process(TextEvent(text="complete", message_id="m2"))
+
+        texts = text_blocks(turn.blocks)
+        assert [b["text"] for b in texts] == ["streamed", "complete"]
 
     def test_model_info_preserves_existing_model_when_empty(self):
         turn = AssistantTurn()

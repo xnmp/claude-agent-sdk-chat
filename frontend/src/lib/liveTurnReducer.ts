@@ -96,6 +96,77 @@ export function processWsMessage(msg: WsMessage, current: LiveTurn | null): Turn
 				}
 			};
 
+		case 'text_block_start':
+			// Open an empty text block; subsequent text_delta events grow it.
+			return {
+				kind: 'update',
+				turn: {
+					...turn,
+					blocks: [...turn.blocks, { kind: 'text', text: '' }]
+				}
+			};
+
+		case 'text_delta': {
+			// Append to the last block if it's still a text block. If for any
+			// reason the previous block isn't text (out-of-order delivery,
+			// dropped block_start), open a new text block with this delta.
+			const last = turn.blocks[turn.blocks.length - 1];
+			if (last && last.kind === 'text') {
+				return {
+					kind: 'update',
+					turn: {
+						...turn,
+						blocks: [
+							...turn.blocks.slice(0, -1),
+							{ ...last, text: last.text + msg.text }
+						]
+					}
+				};
+			}
+			return {
+				kind: 'update',
+				turn: {
+					...turn,
+					blocks: [...turn.blocks, { kind: 'text', text: msg.text }]
+				}
+			};
+		}
+
+		case 'thinking_block_start':
+			return {
+				kind: 'update',
+				turn: {
+					...turn,
+					blocks: [...turn.blocks, { kind: 'thinking', thinking: '', signature: '' }]
+				}
+			};
+
+		case 'thinking_delta': {
+			const last = turn.blocks[turn.blocks.length - 1];
+			if (last && last.kind === 'thinking') {
+				return {
+					kind: 'update',
+					turn: {
+						...turn,
+						blocks: [
+							...turn.blocks.slice(0, -1),
+							{ ...last, thinking: last.thinking + msg.thinking }
+						]
+					}
+				};
+			}
+			return {
+				kind: 'update',
+				turn: {
+					...turn,
+					blocks: [
+						...turn.blocks,
+						{ kind: 'thinking', thinking: msg.thinking, signature: '' }
+					]
+				}
+			};
+		}
+
 		case 'result':
 			return { kind: 'finalize', turn };
 

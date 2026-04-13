@@ -73,7 +73,14 @@ export type WsMessage =
 	| { type: 'tool_use'; id: string; name: string; message_id: string }
 	| { type: 'tool_input'; tool_use_id: string; input: Record<string, unknown> }
 	| { type: 'tool_result'; tool_use_id: string; content: string; is_error: boolean }
+	// Complete text block — used by tests/fakes and as a non-streaming fallback.
 	| { type: 'assistant_text'; text: string; message_id: string }
+	// Streaming text/thinking. The block_start event opens an empty block;
+	// each *_delta event appends to the most recently opened block.
+	| { type: 'text_block_start'; block_index: number; message_id: string }
+	| { type: 'text_delta'; text: string; block_index: number; message_id: string }
+	| { type: 'thinking_block_start'; block_index: number; message_id: string }
+	| { type: 'thinking_delta'; thinking: string; block_index: number; message_id: string }
 	| {
 			type: 'result';
 			session_id: string;

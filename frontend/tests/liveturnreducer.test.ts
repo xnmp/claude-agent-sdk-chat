@@ -145,6 +145,113 @@ describe('processWsMessage', () => {
 		expect(tool.result).toBe('ok');
 	});
 
+	it('opens an empty text block on text_block_start', () => {
+		const action = processWsMessage(
+			{ type: 'text_block_start', block_index: 0, message_id: 'm1' },
+			emptyTurn()
+		);
+		if (action.kind === 'update') {
+			expect(kinds(action.turn)).toEqual(['text']);
+			const block = action.turn.blocks[0];
+			if (block.kind === 'text') {
+				expect(block.text).toBe('');
+			}
+		}
+	});
+
+	it('grows the open text block with text_delta', () => {
+		// Simulate the streaming sequence: start, then several deltas.
+		let turn: LiveTurn | null = emptyTurn();
+		turn = (
+			processWsMessage(
+				{ type: 'text_block_start', block_index: 0, message_id: 'm1' },
+				turn
+			) as { turn: LiveTurn }
+		).turn;
+		for (const chunk of ['He', 'llo', ', world!']) {
+			turn = (
+				processWsMessage(
+					{ type: 'text_delta', text: chunk, block_index: 0, message_id: 'm1' },
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+		}
+		expect(kinds(turn)).toEqual(['text']);
+		const block = turn.blocks[0];
+		if (block.kind === 'text') {
+			expect(block.text).toBe('Hello, world!');
+		}
+	});
+
+	it('text_delta opens a new block when previous block is not text', () => {
+		// Defensive: orphaned delta after a tool_call should still capture text.
+		let turn: LiveTurn | null = emptyTurn();
+		turn = (
+			processWsMessage(
+				{ type: 'tool_use', id: 't1', name: 'Read', message_id: 'm1' },
+				turn
+			) as { turn: LiveTurn }
+		).turn;
+		turn = (
+			processWsMessage(
+				{ type: 'text_delta', text: 'orphan', block_index: 1, message_id: 'm1' },
+				turn
+			) as { turn: LiveTurn }
+		).turn;
+		expect(kinds(turn)).toEqual(['tool_call', 'text']);
+		const second = turn.blocks[1];
+		if (second.kind === 'text') {
+			expect(second.text).toBe('orphan');
+		}
+	});
+
+	it('streams text → tool_use → more text in correct order', () => {
+		// End-to-end streaming sequence: open text, deltas, tool call, open new
+		// text block, more deltas. Block list must reflect the original order.
+		const msgs: WsMessage[] = [
+			{ type: 'text_block_start', block_index: 0, message_id: 'm1' },
+			{ type: 'text_delta', text: 'Let me ', block_index: 0, message_id: 'm1' },
+			{ type: 'text_delta', text: 'check', block_index: 0, message_id: 'm1' },
+			{ type: 'tool_use', id: 't1', name: 'Read', message_id: 'm1' },
+			{ type: 'tool_input', tool_use_id: 't1', input: { path: '/x' } },
+			{ type: 'tool_result', tool_use_id: 't1', content: 'ok', is_error: false },
+			{ type: 'text_block_start', block_index: 2, message_id: 'm1' },
+			{ type: 'text_delta', text: 'all done', block_index: 2, message_id: 'm1' }
+		];
+		let turn: LiveTurn | null = emptyTurn();
+		for (const m of msgs) {
+			turn = (processWsMessage(m, turn) as { turn: LiveTurn }).turn;
+		}
+		expect(kinds(turn)).toEqual(['text', 'tool_call', 'text']);
+		const first = turn.blocks[0];
+		const last = turn.blocks[2];
+		if (first.kind === 'text') expect(first.text).toBe('Let me check');
+		if (last.kind === 'text') expect(last.text).toBe('all done');
+	});
+
+	it('grows a thinking block with thinking_delta', () => {
+		let turn: LiveTurn | null = emptyTurn();
+		turn = (
+			processWsMessage(
+				{ type: 'thinking_block_start', block_index: 0, message_id: 'm1' },
+				turn
+			) as { turn: LiveTurn }
+		).turn;
+		for (const chunk of ['Let ', 'me ', 'reason']) {
+			turn = (
+				processWsMessage(
+					{ type: 'thinking_delta', thinking: chunk, block_index: 0, message_id: 'm1' },
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+		}
+		expect(kinds(turn)).toEqual(['thinking']);
+		const block = turn.blocks[0];
+		if (block.kind === 'thinking') {
+			expect(block.thinking).toBe('Let me reason');
+		}
+	});
+
 	it('returns finalize on result', () => {
 		const turn = emptyTurn();
 		turn.blocks = [{ kind: 'text', text: 'done' }];

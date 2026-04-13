@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..domain.chat import ChatSession, ConversationNotFoundError
-from ..domain.models import ResultEvent, TextEvent
+from ..domain.models import ResultEvent, TextDeltaEvent, TextEvent
 from ..domain.ports import AppState
 from ..infra.background_llm import generate_follow_ups, generate_title
 from .uploads import get_attachment
@@ -77,6 +77,11 @@ async def _stream_turn(
     Runs as a background task so the main receive loop can process
     concurrent control messages (e.g. interrupt) while the turn is in flight.
     """
+    # Accumulate the full assistant text for the title/follow-up generators that
+    # fire after the turn completes. Both a complete TextEvent (used by tests
+    # and the non-streaming fallback) and the streaming TextDeltaEvent fragments
+    # contribute, so the join here works regardless of which path the SDK
+    # adapter takes.
     text_chunks: list[str] = []
     turn_complete = False
 
@@ -85,6 +90,8 @@ async def _stream_turn(
             content, prompt_override=enriched,
         ):
             if isinstance(domain_event, TextEvent):
+                text_chunks.append(domain_event.text)
+            elif isinstance(domain_event, TextDeltaEvent):
                 text_chunks.append(domain_event.text)
             if isinstance(domain_event, ResultEvent):
                 turn_complete = True
@@ -99,7 +106,7 @@ async def _stream_turn(
         asyncio.create_task(
             _run_background_tasks(
                 websocket, conversation_id, conversations, content,
-                "\n\n".join(text_chunks),
+                "".join(text_chunks),
             )
         )
 
