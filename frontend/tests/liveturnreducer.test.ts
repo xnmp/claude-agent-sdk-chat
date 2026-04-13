@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { processWsMessage } from '$lib/liveTurnReducer';
-import type { LiveTurn, WsMessage } from '$lib/types';
+import type { LiveTurn, ToolCallBlock, WsMessage } from '$lib/types';
 
 function emptyTurn(): LiveTurn {
-	return { startedAt: Date.now(), thinking: [], tool_calls: [], text: '' };
+	return { startedAt: Date.now(), blocks: [] };
+}
+
+function kinds(turn: LiveTurn): string[] {
+	return turn.blocks.map((b) => b.kind);
 }
 
 describe('processWsMessage', () => {
@@ -13,49 +17,62 @@ describe('processWsMessage', () => {
 
 		expect(action.kind).toBe('update');
 		if (action.kind === 'update') {
-			expect(action.turn.thinking).toHaveLength(1);
-			expect(action.turn.thinking[0].thinking).toBe('hmm');
+			expect(kinds(action.turn)).toEqual(['thinking']);
+			const block = action.turn.blocks[0];
+			if (block.kind === 'thinking') {
+				expect(block.thinking).toBe('hmm');
+			}
 		}
 	});
 
-	it('appends thinking to existing turn', () => {
+	it('appends thinking blocks to existing turn', () => {
 		const turn = emptyTurn();
-		turn.thinking = [{ thinking: 'first', signature: '' }];
+		turn.blocks = [{ kind: 'thinking', thinking: 'first', signature: '' }];
 
 		const msg: WsMessage = { type: 'thinking', thinking: 'second', message_id: 'm1' };
 		const action = processWsMessage(msg, turn);
 
 		if (action.kind === 'update') {
-			expect(action.turn.thinking).toHaveLength(2);
-			expect(action.turn.thinking[1].thinking).toBe('second');
+			expect(kinds(action.turn)).toEqual(['thinking', 'thinking']);
+			const second = action.turn.blocks[1];
+			if (second.kind === 'thinking') {
+				expect(second.thinking).toBe('second');
+			}
 		}
 	});
 
-	it('adds tool_use to turn', () => {
+	it('appends tool_use as a tool_call block', () => {
 		const msg: WsMessage = { type: 'tool_use', id: 't1', name: 'Read', message_id: 'm1' };
 		const action = processWsMessage(msg, emptyTurn());
 
 		if (action.kind === 'update') {
-			expect(action.turn.tool_calls).toHaveLength(1);
-			expect(action.turn.tool_calls[0]).toMatchObject({ id: 't1', name: 'Read' });
+			expect(kinds(action.turn)).toEqual(['tool_call']);
+			const block = action.turn.blocks[0] as ToolCallBlock;
+			expect(block.id).toBe('t1');
+			expect(block.name).toBe('Read');
 		}
 	});
 
 	it('updates tool_call input on tool_input', () => {
 		const turn = emptyTurn();
-		turn.tool_calls = [{ id: 't1', name: 'Read', input: {}, result: null, is_error: null }];
+		turn.blocks = [
+			{ kind: 'tool_call', id: 't1', name: 'Read', input: {}, result: null, is_error: null }
+		];
 
 		const msg: WsMessage = { type: 'tool_input', tool_use_id: 't1', input: { path: '/tmp' } };
 		const action = processWsMessage(msg, turn);
 
 		if (action.kind === 'update') {
-			expect(action.turn.tool_calls[0].input).toEqual({ path: '/tmp' });
+			const block = action.turn.blocks[0] as ToolCallBlock;
+			expect(block.input).toEqual({ path: '/tmp' });
 		}
 	});
 
 	it('updates tool_call result on tool_result', () => {
 		const turn = emptyTurn();
-		turn.tool_calls = [{ id: 't1', name: 'Read', input: {}, result: null, is_error: null }];
+		turn.blocks = [
+			{ kind: 'tool_call', id: 't1', name: 'Read', input: {}, result: null, is_error: null }
+		];
 
 		const msg: WsMessage = {
 			type: 'tool_result',
@@ -66,35 +83,71 @@ describe('processWsMessage', () => {
 		const action = processWsMessage(msg, turn);
 
 		if (action.kind === 'update') {
-			expect(action.turn.tool_calls[0].result).toBe('file contents');
-			expect(action.turn.tool_calls[0].is_error).toBe(false);
+			const block = action.turn.blocks[0] as ToolCallBlock;
+			expect(block.result).toBe('file contents');
+			expect(block.is_error).toBe(false);
 		}
 	});
 
-	it('sets text on assistant_text', () => {
+	it('appends a text block on assistant_text', () => {
 		const msg: WsMessage = { type: 'assistant_text', text: 'Hello!', message_id: 'm1' };
 		const action = processWsMessage(msg, emptyTurn());
 
 		if (action.kind === 'update') {
-			expect(action.turn.text).toBe('Hello!');
+			expect(kinds(action.turn)).toEqual(['text']);
+			const block = action.turn.blocks[0];
+			if (block.kind === 'text') {
+				expect(block.text).toBe('Hello!');
+			}
 		}
 	});
 
-	it('overwrites text on subsequent assistant_text', () => {
-		const turn = emptyTurn();
-		turn.text = 'partial';
+	it('preserves multiple text blocks instead of overwriting', () => {
+		// Regression: previously a second TextEvent overwrote the first, losing
+		// the model's narrative ("let me check…" → tool → "now I'll…" became
+		// just "now I'll…"). The reducer must append.
+		let turn: LiveTurn | null = emptyTurn();
+		turn = (
+			processWsMessage({ type: 'assistant_text', text: 'partial', message_id: 'm1' }, turn) as {
+				turn: LiveTurn;
+			}
+		).turn;
+		turn = (
+			processWsMessage(
+				{ type: 'assistant_text', text: 'continued', message_id: 'm2' },
+				turn
+			) as { turn: LiveTurn }
+		).turn;
 
-		const msg: WsMessage = { type: 'assistant_text', text: 'partial response', message_id: 'm1' };
-		const action = processWsMessage(msg, turn);
+		expect(kinds(turn)).toEqual(['text', 'text']);
+		const texts = turn.blocks
+			.filter((b): b is { kind: 'text'; text: string } => b.kind === 'text')
+			.map((b) => b.text);
+		expect(texts).toEqual(['partial', 'continued']);
+	});
 
-		if (action.kind === 'update') {
-			expect(action.turn.text).toBe('partial response');
+	it('preserves interleaved text and tool_call ordering', () => {
+		// text → tool_use → tool_result → text — five messages, three blocks.
+		let turn: LiveTurn | null = emptyTurn();
+		const msgs: WsMessage[] = [
+			{ type: 'assistant_text', text: 'let me check', message_id: 'm1' },
+			{ type: 'tool_use', id: 't1', name: 'Read', message_id: 'm1' },
+			{ type: 'tool_input', tool_use_id: 't1', input: { path: '/x' } },
+			{ type: 'tool_result', tool_use_id: 't1', content: 'ok', is_error: false },
+			{ type: 'assistant_text', text: 'done', message_id: 'm2' }
+		];
+		for (const m of msgs) {
+			turn = (processWsMessage(m, turn) as { turn: LiveTurn }).turn;
 		}
+		expect(kinds(turn)).toEqual(['text', 'tool_call', 'text']);
+		const tool = turn.blocks[1] as ToolCallBlock;
+		expect(tool.input).toEqual({ path: '/x' });
+		expect(tool.result).toBe('ok');
 	});
 
 	it('returns finalize on result', () => {
 		const turn = emptyTurn();
-		turn.text = 'done';
+		turn.blocks = [{ kind: 'text', text: 'done' }];
 
 		const msg: WsMessage = {
 			type: 'result',
@@ -109,7 +162,7 @@ describe('processWsMessage', () => {
 
 		expect(action.kind).toBe('finalize');
 		if (action.kind === 'finalize') {
-			expect(action.turn.text).toBe('done');
+			expect(action.turn.blocks).toHaveLength(1);
 		}
 	});
 

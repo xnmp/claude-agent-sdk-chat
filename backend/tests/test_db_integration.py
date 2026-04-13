@@ -13,7 +13,13 @@ import pytest
 
 from backend.config import DATABASE_URL
 from backend.infra.db import PgConversationRepository, PgMessageRepository, PgUserRepository
-from backend.domain.models import AssistantMessageContent, MessageRole
+from backend.domain.models import (
+    AssistantMessageContent,
+    MessageRole,
+    text_blocks,
+    thinking_blocks,
+    tool_call_blocks,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -136,16 +142,18 @@ class TestPgMessageRepository:
 
         await msg_repo.save(conv.id, MessageRole.USER, {"text": "hello"})
         await msg_repo.save(conv.id, MessageRole.ASSISTANT, {
-            "thinking": [], "tool_calls": [], "text": "hi back",
+            "blocks": [{"kind": "text", "text": "hi back"}],
             "model": "claude", "usage": {}, "duration_ms": 50, "total_cost_usd": 0.001,
+            "created_files": [],
         })
 
         msgs = await msg_repo.list(conv.id)
         assert len(msgs) == 2
         assert msgs[0].role == MessageRole.USER
-        assert msgs[0].content["text"] == "hello"
+        assert msgs[0].content["text"] == "hello"  # type: ignore[typeddict-item]
         assert msgs[1].role == MessageRole.ASSISTANT
-        assert msgs[1].content["text"] == "hi back"
+        blocks = msgs[1].content["blocks"]  # type: ignore[typeddict-item]
+        assert text_blocks(blocks)[0]["text"] == "hi back"
 
     async def test_messages_ordered_by_creation(
         self, conv_repo: PgConversationRepository, msg_repo: PgMessageRepository,
@@ -157,7 +165,7 @@ class TestPgMessageRepository:
         await msg_repo.save(conv.id, MessageRole.USER, {"text": "third"})
 
         msgs = await msg_repo.list(conv.id)
-        assert [m.content["text"] for m in msgs] == ["first", "second", "third"]
+        assert [m.content["text"] for m in msgs] == ["first", "second", "third"]  # type: ignore[typeddict-item]
 
     async def test_delete_conversation_cascades_to_messages(
         self, conv_repo: PgConversationRepository, msg_repo: PgMessageRepository,
@@ -197,18 +205,54 @@ class TestPgMessageRepository:
     ):
         conv = await conv_repo.create(title="TEST-jsonb")
         complex_content: AssistantMessageContent = {
-            "thinking": [{"thinking": "deep thought", "signature": "xyz"}],
-            "tool_calls": [
-                {"id": "t1", "name": "Read", "input": {"file_path": "/tmp/x"}, "result": "contents", "is_error": False},
+            "blocks": [
+                {"kind": "thinking", "thinking": "deep thought", "signature": "xyz"},
+                {"kind": "text", "text": "let me check"},
+                {"kind": "tool_call", "id": "t1", "name": "Read",
+                 "input": {"file_path": "/tmp/x"},
+                 "result": "contents", "is_error": False},
+                {"kind": "text", "text": "answer"},
             ],
-            "text": "answer",
             "model": "claude-sonnet-4-20250514",
             "usage": {"input_tokens": 100, "output_tokens": 50},
             "duration_ms": 2000,
             "total_cost_usd": 0.005,
+            "created_files": [],
         }
 
         await msg_repo.save(conv.id, MessageRole.ASSISTANT, complex_content)
         msgs = await msg_repo.list(conv.id)
 
         assert msgs[0].content == complex_content
+
+    async def test_legacy_assistant_content_is_normalized_on_read(
+        self, conv_repo: PgConversationRepository, msg_repo: PgMessageRepository,
+    ):
+        """Pre-refactor rows in the bucket shape must still load via the read-side
+        adapter — guarantees zero-downtime upgrade for existing chat history."""
+        conv = await conv_repo.create(title="TEST-legacy")
+        legacy_content = {  # type: ignore[var-annotated]
+            "thinking": [{"thinking": "hmm", "signature": "s"}],
+            "tool_calls": [
+                {"id": "t1", "name": "Read", "input": {"file_path": "/x"},
+                 "result": "contents", "is_error": False},
+            ],
+            "text": "the answer",
+            "model": "claude-sonnet-4-20250514",
+            "usage": {},
+            "duration_ms": 1500,
+            "total_cost_usd": 0.003,
+        }
+
+        await msg_repo.save(conv.id, MessageRole.ASSISTANT, legacy_content)  # type: ignore[arg-type]
+        msgs = await msg_repo.list(conv.id)
+
+        loaded: AssistantMessageContent = msgs[0].content  # type: ignore[assignment]
+        kinds = [b["kind"] for b in loaded["blocks"]]
+        assert kinds == ["thinking", "tool_call", "text"]
+        assert thinking_blocks(loaded["blocks"])[0]["thinking"] == "hmm"
+        tool = tool_call_blocks(loaded["blocks"])[0]
+        assert tool["name"] == "Read"
+        assert tool["result"] == "contents"
+        assert text_blocks(loaded["blocks"])[0]["text"] == "the answer"
+        assert loaded["duration_ms"] == 1500

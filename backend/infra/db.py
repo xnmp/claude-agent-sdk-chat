@@ -9,7 +9,15 @@ from typing import Any
 import asyncpg
 
 from ..config import DATABASE_URL
-from ..domain.models import ANONYMOUS_USER_ID, Conversation, Message, MessageContent, MessageRole, User
+from ..domain.models import (
+    ANONYMOUS_USER_ID,
+    Conversation,
+    Message,
+    MessageContent,
+    MessageRole,
+    User,
+    normalize_assistant_content,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -65,10 +73,16 @@ def _row_to_conversation(row: asyncpg.Record) -> Conversation:
 def _row_to_message(row: asyncpg.Record) -> Message:
     raw_content = row["content"]
     content = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
+    role = MessageRole(row["role"])
+    # Assistant content may be in the legacy bucket shape (thinking/tool_calls/text)
+    # or the new ordered-blocks shape — normalize on read so downstream code only
+    # has to handle one format.
+    if role == MessageRole.ASSISTANT and isinstance(content, dict):
+        content = normalize_assistant_content(content)
     return Message(
         id=row["id"],
         conversation_id=row["conversation_id"],
-        role=MessageRole(row["role"]),
+        role=role,
         content=content,
         created_at=row["created_at"],
     )

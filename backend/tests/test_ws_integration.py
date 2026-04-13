@@ -21,6 +21,7 @@ from backend.domain.models import (
     ThinkingEvent,
     ToolResultEvent,
     ToolUseEvent,
+    text_blocks,
 )
 from backend.domain.ports import AppState
 from backend.routers import ws
@@ -142,9 +143,10 @@ class TestWebSocketEndpoint:
         saved = asyncio.get_event_loop().run_until_complete(msg_repo.list(conv.id))
         assert len(saved) == 2
         assert saved[0].role == MessageRole.USER
-        assert saved[0].content["text"] == "hello"
+        assert saved[0].content["text"] == "hello"  # type: ignore[typeddict-item]
         assert saved[1].role == MessageRole.ASSISTANT
-        assert saved[1].content["text"] == "response"
+        blocks = saved[1].content["blocks"]  # type: ignore[typeddict-item]
+        assert text_blocks(blocks)[0]["text"] == "response"
 
     def test_interrupt_reaches_sdk_while_stream_is_in_flight(self):
         """Regression: interrupt frames sent mid-stream must be dispatched
@@ -174,8 +176,8 @@ class TestWebSocketEndpoint:
                 for event in self._after:
                     yield event
 
-        before = [TextEvent(text="partial", message_id="m1")]
-        after = [
+        before: list[SDKEvent] = [TextEvent(text="partial", message_id="m1")]
+        after: list[SDKEvent] = [
             ResultEvent(
                 session_id="s1", duration_ms=10, total_cost_usd=0.0,
                 num_turns=1, is_error=False,
