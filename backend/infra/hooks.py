@@ -14,6 +14,7 @@ def make_hooks(
     uploads_dir: str,
     extra_readable_dirs: list[str] | None = None,
     extra_writable_dirs: list[str] | None = None,
+    track_root: str | None = None,
 ) -> dict:
     """Create SDK hook config.
 
@@ -22,6 +23,11 @@ def make_hooks(
         scripts_dir: Where intermediate scripts/code can be written (not downloaded).
         uploads_dir: Where user uploads are stored (read-only for agent).
         extra_writable_dirs: Additional directories the agent may write to.
+        track_root: Base for computing tracked-file relative paths. Defaults to
+            ``output_dir``. Set this when ``output_dir`` is a subdirectory (e.g. a
+            session-scoped folder under a shared output root) so that emitted
+            paths stay relative to the shared root and line up with a static
+            mount that serves that whole root.
 
     Returns a hooks dict suitable for ClaudeAgentOptions.hooks, plus a
     reference to the created_files set for retrieval after a turn.
@@ -37,6 +43,7 @@ def make_hooks(
     if extra_writable_dirs:
         readable_dirs.extend(os.path.realpath(d) for d in extra_writable_dirs)
     abs_output = os.path.realpath(output_dir)
+    abs_track_root = os.path.realpath(track_root) if track_root else abs_output
 
     def _is_under(path: str, allowed: list[str]) -> bool:
         real = os.path.realpath(path)
@@ -126,7 +133,7 @@ def make_hooks(
             real = os.path.realpath(file_path)
             # Only track files in output/ (not output_scripts/)
             if real.startswith(abs_output + os.sep) and os.path.isfile(real):
-                rel = os.path.relpath(real, abs_output)
+                rel = os.path.relpath(real, abs_track_root)
                 created_files.add(rel)
         return {}
 
@@ -138,7 +145,7 @@ def make_hooks(
         for root, _dirs, files in os.walk(abs_output):
             for fname in files:
                 full = os.path.join(root, fname)
-                found.add(os.path.relpath(full, abs_output))
+                found.add(os.path.relpath(full, abs_track_root))
         return found
 
     async def snapshot_output_before_bash(
