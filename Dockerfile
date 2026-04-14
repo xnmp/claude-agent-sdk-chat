@@ -42,6 +42,7 @@ RUN apt-get update \
         nodejs \
         npm \
         bubblewrap \
+        socat \
         curl \
         ca-certificates \
         git \
