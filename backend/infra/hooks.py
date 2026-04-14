@@ -12,6 +12,7 @@ def make_hooks(
     output_dir: str,
     scripts_dir: str,
     uploads_dir: str,
+    extra_readable_dirs: list[str] | None = None,
 ) -> dict:
     """Create SDK hook config.
 
@@ -27,6 +28,8 @@ def make_hooks(
 
     writable_dirs = [os.path.realpath(d) for d in [output_dir, scripts_dir]]
     readable_dirs = [os.path.realpath(d) for d in [output_dir, scripts_dir, uploads_dir]]
+    if extra_readable_dirs:
+        readable_dirs.extend(os.path.realpath(d) for d in extra_readable_dirs)
     abs_output = os.path.realpath(output_dir)
 
     def _is_under(path: str, allowed: list[str]) -> bool:
