@@ -34,6 +34,15 @@ export interface ToolCallEntry {
 export interface TextBlock {
 	kind: 'text';
 	text: string;
+	/**
+	 * Number of characters of `text` that the typewriter has revealed so far.
+	 *
+	 * For streaming / just-finalized blocks this starts at 0 and is advanced
+	 * by the typewriter ticker toward `text.length`. For blocks loaded from the
+	 * DB (historical messages) it's set to `text.length` on load so they
+	 * render instantly without a fake typewriter replay.
+	 */
+	revealed: number;
 }
 
 export interface ThinkingBlock extends ThinkingEntry {

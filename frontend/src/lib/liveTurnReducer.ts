@@ -88,28 +88,34 @@ export function processWsMessage(msg: WsMessage, current: LiveTurn | null): Turn
 			};
 
 		case 'assistant_text':
+			// Non-streaming path (tests, legacy fallback): mark as fully revealed
+			// so there's no fake typewriter replay when the data arrives all at once.
 			return {
 				kind: 'update',
 				turn: {
 					...turn,
-					blocks: [...turn.blocks, { kind: 'text', text: msg.text }]
+					blocks: [
+						...turn.blocks,
+						{ kind: 'text', text: msg.text, revealed: msg.text.length }
+					]
 				}
 			};
 
 		case 'text_block_start':
-			// Open an empty text block; subsequent text_delta events grow it.
+			// Open an empty text block for the streaming path. The typewriter
+			// ticker in +page.svelte advances `revealed` toward `text.length`
+			// independently of how fast the deltas arrive.
 			return {
 				kind: 'update',
 				turn: {
 					...turn,
-					blocks: [...turn.blocks, { kind: 'text', text: '' }]
+					blocks: [...turn.blocks, { kind: 'text', text: '', revealed: 0 }]
 				}
 			};
 
 		case 'text_delta': {
-			// Append to the last block if it's still a text block. If for any
-			// reason the previous block isn't text (out-of-order delivery,
-			// dropped block_start), open a new text block with this delta.
+			// Append to the last block if it's still a text block. Leave
+			// `revealed` untouched — the ticker owns that cursor.
 			const last = turn.blocks[turn.blocks.length - 1];
 			if (last && last.kind === 'text') {
 				return {
@@ -123,11 +129,16 @@ export function processWsMessage(msg: WsMessage, current: LiveTurn | null): Turn
 					}
 				};
 			}
+			// Defensive: delta arrived without a paired start. Open a fresh
+			// block with revealed=0 so the ticker reveals it progressively.
 			return {
 				kind: 'update',
 				turn: {
 					...turn,
-					blocks: [...turn.blocks, { kind: 'text', text: msg.text }]
+					blocks: [
+						...turn.blocks,
+						{ kind: 'text', text: msg.text, revealed: 0 }
+					]
 				}
 			};
 		}
