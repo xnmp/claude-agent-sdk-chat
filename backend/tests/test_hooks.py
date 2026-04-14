@@ -185,6 +185,39 @@ class TestTrackCreatedFiles:
         # The set returned by make_hooks is the same one the hook writes to
         assert "shared.txt" in created_files
 
+    async def test_tracks_with_track_root_prefixes_relative_path(
+        self, tmp_path, scripts_dir, uploads_dir,
+    ):
+        """When track_root is a parent of output_dir, rel paths include the subdir name.
+
+        This is how per-session output folders surface in the assistant turn:
+        output_dir = <root>/<session_id>, track_root = <root>, so a created file
+        at <root>/<session_id>/report.csv is reported as "<session_id>/report.csv"
+        — aligning with the /api/output static mount on <root>.
+        """
+        output_root = tmp_path / "root_output"
+        output_root.mkdir()
+        session_id = "session-abc"
+        session_output = output_root / session_id
+        session_output.mkdir()
+
+        config = make_hooks(
+            str(session_output), scripts_dir, uploads_dir,
+            track_root=str(output_root),
+        )
+        track = config["hooks"]["PostToolUse"][0].hooks[0]
+        created_files = config["created_files"]
+
+        file_path = session_output / "report.csv"
+        file_path.write_text("data")
+
+        await track(
+            {"tool_input": {"file_path": str(file_path)}},
+            "tu-1",
+            {"signal": None},
+        )
+        assert f"{session_id}/report.csv" in created_files
+
 
 class TestEnforceReadDirs:
     @pytest.fixture

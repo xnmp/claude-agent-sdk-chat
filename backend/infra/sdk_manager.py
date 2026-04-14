@@ -369,8 +369,14 @@ class SDKManager:
             self._last_access[session_id] = _now()
             return self._clients[session_id]
 
-        output_dir = os.path.join(AGENT_CWD, "output")
-        scripts_dir = os.path.join(AGENT_CWD, "output_scripts")
+        # Per-session subdirectories under shared output roots. The FastAPI
+        # static mount still serves the whole AGENT_CWD/output tree at
+        # /api/output, so tracked files are reported as "<session_id>/<name>"
+        # via hooks' track_root and resolve via the URL scheme unchanged.
+        output_root = os.path.join(AGENT_CWD, "output")
+        scripts_root = os.path.join(AGENT_CWD, "output_scripts")
+        output_dir = os.path.join(output_root, session_id)
+        scripts_dir = os.path.join(scripts_root, session_id)
         uploads_dir = os.path.join(AGENT_CWD, "uploads")
         docs_dir = os.path.join(AGENT_CWD, "docs")
         for d in [output_dir, scripts_dir, uploads_dir, docs_dir]:
@@ -384,6 +390,7 @@ class SDKManager:
                 str(_REPO_ROOT / ".claude" / "skills"),
             ],
             extra_writable_dirs=[docs_dir],
+            track_root=output_root,
         )
 
         options = ClaudeAgentOptions(
