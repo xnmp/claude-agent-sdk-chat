@@ -53,7 +53,22 @@ export interface ToolCallBlock extends ToolCallEntry {
 	kind: 'tool_call';
 }
 
-export type Block = TextBlock | ThinkingBlock | ToolCallBlock;
+/**
+ * A user-facing multiple-choice question raised by the agent's
+ * `mcp__askuser__ask` tool. Identified by the originating tool_use id so the
+ * paired tool_result can mark it answered. The selected option is the
+ * literal value the user clicked.
+ */
+export interface QuestionBlock {
+	kind: 'question';
+	tool_use_id: string;
+	question: string;
+	options: string[];
+	answered: boolean;
+	selected: string | null;
+}
+
+export type Block = TextBlock | ThinkingBlock | ToolCallBlock | QuestionBlock;
 
 export interface UserContent {
 	text: string;

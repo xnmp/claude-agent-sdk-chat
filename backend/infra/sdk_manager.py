@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import AGENT_CWD, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_MODEL, AUTH_PROXY_ENABLED, AUTH_PROXY_PORT
+from .askuser_bridge import AskUserBridge
 from .hooks import make_hooks
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
@@ -171,11 +172,26 @@ class ClaudeSDKClientAdapter:
     what the stream events already produced.
     """
 
-    def __init__(self, client: ClaudeSDKClient, created_files: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        client: ClaudeSDKClient,
+        created_files: set[str] | None = None,
+        askuser_bridge: AskUserBridge | None = None,
+    ) -> None:
         self._client = client
         self.created_files: set[str] = created_files if created_files is not None else set()
+        self.askuser_bridge: AskUserBridge | None = askuser_bridge
         self._current_message_id: str = ""
         self._open_blocks: dict[int, dict[str, Any]] = {}
+
+    def submit_question_answer(self, answer: str) -> bool:
+        """Resolve a pending askuser question with the user's answer.
+
+        Returns False if no question is outstanding (stray client message).
+        """
+        if self.askuser_bridge is None:
+            return False
+        return self.askuser_bridge.submit_answer(answer)
 
     async def connect(self) -> None:
         logger.debug("sdk adapter: connect")
@@ -420,10 +436,20 @@ class SDKManager:
             track_root=output_root,
         )
 
+        # Per-session askuser bridge — its in-process MCP server holds a
+        # reference to a per-session asyncio future, so a fresh bridge (and
+        # fresh server config) is built for every new session.
+        askuser_bridge = AskUserBridge()
+        mcp_servers: dict[str, Any] = {
+            **_MCP_SERVERS,
+            "askuser": askuser_bridge.create_server(),
+        }
+
         options = ClaudeAgentOptions(
             allowed_tools=[
                 "Read", "Edit", "Bash", "Glob", "Grep", "Write", "Skill",
                 *_MCP_ALLOWED_TOOLS,
+                "mcp__askuser__ask",
             ],
             permission_mode="acceptEdits",
             cwd=AGENT_CWD,
@@ -431,7 +457,7 @@ class SDKManager:
             system_prompt=_load_system_prompt(output_dir, scripts_dir),
             setting_sources=["user", "project"],
             sandbox=_SANDBOX_SETTINGS,
-            mcp_servers=_MCP_SERVERS,  # type: ignore[arg-type]
+            mcp_servers=mcp_servers,  # type: ignore[arg-type]
             hooks=hook_config["hooks"],
             env=_build_agent_env(),
             # Stream raw Anthropic API events alongside the buffered
@@ -446,7 +472,9 @@ class SDKManager:
             options.session_id = session_id
 
         client = ClaudeSDKClient(options=options)
-        adapter = ClaudeSDKClientAdapter(client, hook_config["created_files"])
+        adapter = ClaudeSDKClientAdapter(
+            client, hook_config["created_files"], askuser_bridge=askuser_bridge,
+        )
         self._clients[session_id] = adapter
         self._last_access[session_id] = _now()
         logger.info(

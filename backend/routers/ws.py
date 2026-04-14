@@ -199,6 +199,11 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
             elif msg_type == "interrupt":
                 await session.handle_interrupt()
 
+            elif msg_type == "question_answer":
+                answer = data.get("answer")
+                if isinstance(answer, str):
+                    session.submit_question_answer(answer)
+
     except WebSocketDisconnect:
         pass
     except Exception:

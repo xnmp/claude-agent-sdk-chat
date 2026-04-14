@@ -6,7 +6,9 @@
  * stays as five separate blocks, preserving the model's narrative.
  */
 
-import type { Block, LiveTurn, ToolCallBlock, WsMessage } from './types';
+import type { Block, LiveTurn, QuestionBlock, ToolCallBlock, WsMessage } from './types';
+
+const ASK_TOOL_NAME = 'mcp__askuser__ask';
 
 export type TurnAction =
 	| { kind: 'update'; turn: LiveTurn }
@@ -20,6 +22,16 @@ function emptyTurn(): LiveTurn {
 
 function mapBlocks(blocks: Block[], id: string, fn: (tc: ToolCallBlock) => ToolCallBlock): Block[] {
 	return blocks.map((b) => (b.kind === 'tool_call' && b.id === id ? fn(b) : b));
+}
+
+function mapQuestionBlock(
+	blocks: Block[],
+	tool_use_id: string,
+	fn: (q: QuestionBlock) => QuestionBlock
+): Block[] {
+	return blocks.map((b) =>
+		b.kind === 'question' && b.tool_use_id === tool_use_id ? fn(b) : b
+	);
 }
 
 /**
@@ -44,6 +56,28 @@ export function processWsMessage(msg: WsMessage, current: LiveTurn | null): Turn
 			};
 
 		case 'tool_use':
+			if (msg.name === ASK_TOOL_NAME) {
+				// Render askuser tool calls as interactive question blocks
+				// instead of generic tool cards. Question text and options
+				// arrive in the paired tool_input message.
+				return {
+					kind: 'update',
+					turn: {
+						...turn,
+						blocks: [
+							...turn.blocks,
+							{
+								kind: 'question',
+								tool_use_id: msg.id,
+								question: '',
+								options: [],
+								answered: false,
+								selected: null
+							}
+						]
+					}
+				};
+			}
 			return {
 				kind: 'update',
 				turn: {
@@ -62,7 +96,32 @@ export function processWsMessage(msg: WsMessage, current: LiveTurn | null): Turn
 				}
 			};
 
-		case 'tool_input':
+		case 'tool_input': {
+			// If this input belongs to a question block, fill in question/options.
+			const targetsQuestion = turn.blocks.some(
+				(b) => b.kind === 'question' && b.tool_use_id === msg.tool_use_id
+			);
+			if (targetsQuestion) {
+				const question =
+					typeof msg.input.question === 'string' ? msg.input.question : '';
+				const optionsRaw = msg.input.options;
+				const options = Array.isArray(optionsRaw)
+					? (optionsRaw as unknown[]).filter(
+							(o): o is string => typeof o === 'string'
+						)
+					: [];
+				return {
+					kind: 'update',
+					turn: {
+						...turn,
+						blocks: mapQuestionBlock(turn.blocks, msg.tool_use_id, (q) => ({
+							...q,
+							question,
+							options
+						}))
+					}
+				};
+			}
 			return {
 				kind: 'update',
 				turn: {
@@ -73,8 +132,25 @@ export function processWsMessage(msg: WsMessage, current: LiveTurn | null): Turn
 					}))
 				}
 			};
+		}
 
-		case 'tool_result':
+		case 'tool_result': {
+			const targetsQuestion = turn.blocks.some(
+				(b) => b.kind === 'question' && b.tool_use_id === msg.tool_use_id
+			);
+			if (targetsQuestion) {
+				return {
+					kind: 'update',
+					turn: {
+						...turn,
+						blocks: mapQuestionBlock(turn.blocks, msg.tool_use_id, (q) => ({
+							...q,
+							answered: true,
+							selected: q.selected ?? msg.content
+						}))
+					}
+				};
+			}
 			return {
 				kind: 'update',
 				turn: {
@@ -86,6 +162,7 @@ export function processWsMessage(msg: WsMessage, current: LiveTurn | null): Turn
 					}))
 				}
 			};
+		}
 
 		case 'assistant_text':
 			// Non-streaming path (tests, legacy fallback): mark as fully revealed

@@ -14,7 +14,8 @@
 		suggestions = [],
 		conversationId = null,
 		onSend,
-		onInterrupt
+		onInterrupt,
+		onAnswerQuestion = () => {}
 	}: {
 		messages: Message[];
 		liveTurn: LiveTurn | null;
@@ -25,6 +26,7 @@
 		conversationId?: string | null;
 		onSend: (content: string, files: File[]) => void;
 		onInterrupt: () => void;
+		onAnswerQuestion?: (toolUseId: string, answer: string) => void;
 	} = $props();
 
 	let scrollContainer: HTMLDivElement | undefined = $state();
@@ -114,11 +116,11 @@
 		<div class="messages" bind:this={scrollContainer} onscroll={handleScroll} onwheel={handleWheel}>
 			<div class="messages-inner" bind:this={messagesInner}>
 				{#each messages as msg (msg.id)}
-					<TurnBubble message={msg} {settings} />
+					<TurnBubble message={msg} {settings} {onAnswerQuestion} />
 				{/each}
 
 				{#if liveTurn}
-					<TurnBubble {liveTurn} isLive={true} {settings} />
+					<TurnBubble {liveTurn} isLive={true} {settings} {onAnswerQuestion} />
 				{/if}
 			</div>
 		</div>
