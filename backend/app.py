@@ -77,3 +77,12 @@ app.mount("/api/output", StaticFiles(directory=_output_dir), name="output")
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# Serve the built SvelteKit frontend (production image only). Mounted last so
+# every `/api/*` route above takes precedence; unknown paths fall through to
+# the SPA's index.html. In local dev (no build directory) this mount is
+# skipped and the frontend is served by `vite dev` on :5173.
+_frontend_build = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "build")
+if os.path.isdir(_frontend_build):
+    app.mount("/", StaticFiles(directory=_frontend_build, html=True), name="frontend")

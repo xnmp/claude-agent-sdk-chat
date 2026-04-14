@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.pyrefly_cache
+.ruff_cache
+
+# Node / frontend
+frontend/node_modules
+frontend/build
+frontend/.svelte-kit
+frontend/test-results
+frontend/playwright-report
+frontend/screenshots
+frontend/.env*
+
+# Local agent workspace (mounted at runtime; never bake into image)
+output
+output_scripts
+uploads
+docs
+agent-workspace
+
+# Editors / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Screenshots, scratch, test artifacts
+screenshots
+test-results
+
+# Claude local state
+.claude
+CLAUDE.md

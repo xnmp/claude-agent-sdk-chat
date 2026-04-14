@@ -1,0 +1,67 @@
+# Local production-like stack: builds the app image and runs it against
+# a sibling Postgres. Mirrors the DB creds used in scripts/dev.sh so the
+# host-side psql tooling keeps working.
+#
+# Usage:
+#   docker compose up --build
+# Then open http://localhost:8000
+#
+# Required env (put in .env next to this file or export before `up`):
+#   ANTHROPIC_API_KEY   (or ANTHROPIC_AUTH_TOKEN for OAuth token)
+#   ANTHROPIC_MODEL     (optional override)
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: claude-chat-postgres
+    environment:
+      POSTGRES_USER: claude_chat
+      POSTGRES_PASSWORD: claude_chat
+      POSTGRES_DB: claude_chat
+    ports:
+      # Same 5433 mapping as scripts/dev.sh so host tooling matches.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Postgres auto-runs *.sql files from this dir on first init only.
+      - ./schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claude_chat -d claude_chat"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: claude-agent-sdk-chat:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Required for the Claude CLI's bubblewrap sandbox to function inside a
+    # container:
+    #   - seccomp=unconfined: Docker's default profile blocks pivot_root
+    #   - systempaths=unconfined: default masked /proc paths prevent bwrap
+    #     from mounting a fresh procfs inside its user namespace
+    # No extra capabilities needed — bwrap uses unprivileged user namespaces
+    # and gains ns-local caps from there, rather than host-level privileges.
+    security_opt:
+      - seccomp=unconfined
+      - systempaths=unconfined
+    environment:
+      DATABASE_URL: postgresql://claude_chat:claude_chat@postgres:5432/claude_chat
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      AGENT_CWD: /app/agent-workspace
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8000}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist agent outputs and uploads across restarts.
+      - agent-workspace:/app/agent-workspace
+
+volumes:
+  pgdata:
+  agent-workspace:
