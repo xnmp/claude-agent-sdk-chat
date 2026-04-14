@@ -27,15 +27,17 @@ RUN npm run build
 # system Python lives in a world-readable location and the `app` user can
 # execute it without any chmod/chown games.
 #
-# Node is layered on top because the Claude CLI is distributed as an npm
-# package (@anthropic-ai/claude-code) that shells out to a Node runtime.
+# No Node runtime in this stage: the claude-agent-sdk Python package vendors
+# a self-contained Claude CLI ELF binary at
+# `site-packages/claude_agent_sdk/_bundled/claude` and its subprocess
+# transport probes that path *before* $PATH. Installing Node + the npm
+# @anthropic-ai/claude-code package would just be dead weight.
 FROM python:3.12-slim-trixie AS runtime
 
 # System deps:
-#   - nodejs                 : required at runtime by Claude CLI (trixie
-#                              ships Node 22, matching what the CLI expects)
-#   - npm                    : used at build-time only, for the CLI install
-#   - bubblewrap             : Claude CLI's Bash sandbox calls bwrap
+#   - bubblewrap, socat      : Claude CLI's Bash sandbox calls bwrap and
+#                              socat. Without either, the sandbox
+#                              silently disables itself.
 #   - curl, ca-certificates  : uv installer + healthcheck
 #   - git                    : agents frequently shell out to it
 #   - tini                   : proper signal handling for the python process
@@ -48,8 +50,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        nodejs \
-        npm \
         bubblewrap \
         socat \
         curl \
@@ -69,12 +69,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV UV_INSTALL_DIR=/usr/local/bin
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv --version
-
-# Install Claude CLI globally. Pinned to match the host install so behavior
-# is reproducible; bump deliberately when upgrading.
-RUN --mount=type=cache,target=/root/.npm \
-    npm install -g --no-audit --no-fund @anthropic-ai/claude-code@2.1.108 \
-    && claude --version
 
 # Non-root user for the running app. Keeping root for the install steps
 # above avoids permission contortions with apt/npm.
