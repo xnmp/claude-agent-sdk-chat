@@ -6,6 +6,24 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
+# Strip empty ANTHROPIC_* env vars so downstream libraries don't treat
+# "" as a "configured" value. docker-compose's `${VAR:-}` fallback sets
+# unset host vars to empty strings inside the container; the anthropic
+# Python SDK then reads an empty ANTHROPIC_AUTH_TOKEN as a bearer token
+# and builds a malformed `Authorization: Bearer ` header, breaking title
+# generation and follow-up suggestions when only ANTHROPIC_API_KEY is
+# configured. Removing empty keys entirely lets the SDK's os.environ.get
+# calls return None, so only real values influence its auth choice.
+for _k in (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_SMALL_FAST_MODEL",
+):
+    if os.environ.get(_k) == "":
+        del os.environ[_k]
+
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql://claude_chat:claude_chat@localhost:5433/claude_chat",
