@@ -70,8 +70,6 @@ def _get_client() -> _ClientHandle | None:
     # Fall back to a Bearer token (e.g. corporate/AIPE gateway auth).
     if ANTHROPIC_AUTH_TOKEN:
         print("Using ANTHROPIC_AUTH_TOKEN for background LLM tasks; make sure this is intentional and secure.")
-        print(ANTHROPIC_AUTH_TOKEN)
-        print(_base_url_kwarg())
         token_kwargs: dict[str, Any] = {
             "auth_token": ANTHROPIC_AUTH_TOKEN,
             "http_client": _http_client(),
