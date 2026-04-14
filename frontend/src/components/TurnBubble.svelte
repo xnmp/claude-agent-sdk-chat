@@ -155,8 +155,8 @@
 
 	/* User messages */
 	.user-bubble {
-		background: var(--text);
-		color: var(--bg-surface);
+		background: var(--accent);
+		color: white;
 		margin-left: auto;
 		border-bottom-right-radius: 4px;
 		box-shadow: var(--shadow-sm);
