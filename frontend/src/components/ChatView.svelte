@@ -4,6 +4,13 @@
 	import type { Settings } from '$lib/settings';
 	import TurnBubble from './TurnBubble.svelte';
 	import MessageInput from './MessageInput.svelte';
+	import TodoList from './TodoList.svelte';
+
+	interface TodoItem {
+		content: string;
+		status: 'pending' | 'in_progress' | 'completed';
+		activeForm: string;
+	}
 
 	let {
 		messages,
@@ -94,6 +101,21 @@
 	});
 
 	let noConversation = $derived(wsStatus === 'disconnected' && messages.length === 0);
+
+	// Hoist the live turn's TodoWrite state into a standalone panel so it
+	// doesn't get lost when the agent racks up many subsequent tool calls.
+	// Historical turns still render their todo list inline via TurnBubble.
+	let liveTodos = $derived.by<TodoItem[] | null>(() => {
+		if (!liveTurn) return null;
+		for (let i = liveTurn.blocks.length - 1; i >= 0; i--) {
+			const b = liveTurn.blocks[i];
+			if (b.kind === 'tool_call' && b.name === 'TodoWrite') {
+				const todos = (b.input as { todos?: unknown })?.todos;
+				return Array.isArray(todos) ? (todos as TodoItem[]) : null;
+			}
+		}
+		return null;
+	});
 </script>
 
 <main class="chat-view">
@@ -111,6 +133,13 @@
 			<p>Create or select a conversation from the sidebar.</p>
 		</div>
 	{:else}
+		{#if liveTodos}
+			<div class="todo-panel">
+				<div class="todo-panel-inner">
+					<TodoList todos={liveTodos} />
+				</div>
+			</div>
+		{/if}
 		<div class="messages" bind:this={scrollContainer} onscroll={handleScroll} onwheel={handleWheel}>
 			<div class="messages-inner" bind:this={messagesInner}>
 				{#each messages as msg (msg.id)}
@@ -148,6 +177,23 @@
 		flex: 1;
 		overflow-y: auto;
 		padding: 28px 0 8px;
+	}
+
+	/* Standalone todo panel — sits above the scrollable message list and
+	   stays visible while the live turn streams. Vanishes when the turn
+	   finalizes; at that point TurnBubble takes over and renders the todo
+	   list inline in the historical bubble. */
+	.todo-panel {
+		flex-shrink: 0;
+		padding: 14px 24px 0;
+		background: var(--bg);
+	}
+
+	.todo-panel-inner {
+		max-width: 900px;
+		margin: 0 auto;
+		box-shadow: var(--shadow-md);
+		border-radius: var(--radius);
 	}
 
 	.messages-inner {

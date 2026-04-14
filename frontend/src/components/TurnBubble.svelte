@@ -64,13 +64,23 @@
 		isLive && liveTurn ? liveTurn.blocks : (assistantContent?.blocks ?? []),
 	);
 
+	// During live turns TodoWrite blocks are rendered by ChatView's standalone
+	// panel instead of inline, so treat them as invisible when deciding whether
+	// the bubble is "empty" or what tool is currently running.
+	let visibleBlockCount = $derived(
+		blocks.filter(
+			(b) => !(isLive && b.kind === "tool_call" && b.name === "TodoWrite"),
+		).length,
+	);
 	// Show a streaming dot indicator only when streaming and the model hasn't
-	// emitted any text or tool yet.
-	let showStreamingDots = $derived(isLive && blocks.length === 0);
+	// emitted any *visible* text or tool yet.
+	let showStreamingDots = $derived(isLive && visibleBlockCount === 0);
 	let lastToolCall = $derived.by((): ToolCallBlock | null => {
 		for (let i = blocks.length - 1; i >= 0; i--) {
 			const b = blocks[i];
-			if (b.kind === "tool_call") return b;
+			if (b.kind !== "tool_call") continue;
+			if (isLive && b.name === "TodoWrite") continue;
+			return b;
 		}
 		return null;
 	});
@@ -141,7 +151,7 @@
 						<pre>{block.thinking}</pre>
 					</details>
 				{:else if block.kind === "tool_call" && block.name === "TodoWrite"}
-					{#if idx === firstTodoIndex && latestTodos}
+					{#if !isLive && idx === firstTodoIndex && latestTodos}
 						<TodoList todos={latestTodos} />
 					{/if}
 				{:else if block.kind === "tool_call"}

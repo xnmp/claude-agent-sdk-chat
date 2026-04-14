@@ -259,6 +259,60 @@ describe('TurnBubble', () => {
 		expect(screen.getByText('Write tests')).toBeInTheDocument();
 	});
 
+	it('suppresses the inline TodoList for a LIVE turn (ChatView owns the panel)', () => {
+		// During streaming the standalone panel in ChatView renders the todo
+		// list. TurnBubble must not render a second inline copy, otherwise the
+		// list would appear twice while the turn is in flight.
+		const liveTurn: LiveTurn = {
+			startedAt: Date.now(),
+			blocks: [
+				{
+					kind: 'tool_call',
+					id: 'tw1',
+					name: 'TodoWrite',
+					input: {
+						todos: [
+							{ content: 'A', status: 'in_progress', activeForm: 'Doing A' }
+						]
+					},
+					result: null,
+					is_error: null
+				}
+			]
+		};
+		const { container } = render(TurnBubble, { props: { liveTurn, isLive: true } });
+
+		// No inline todo-list in the bubble.
+		expect(container.querySelector('.todo-list')).toBeNull();
+		// The bubble still shows the "working" dots because the only block is
+		// a TodoWrite (which is visually handed off to the panel), so nothing
+		// visible has streamed yet.
+		expect(container.querySelectorAll('.dot').length).toBeGreaterThan(0);
+	});
+
+	it('renders the inline TodoList after a turn finalizes (historical bubble)', () => {
+		// Sanity: same todos, but now as a persisted Message (isLive=false).
+		// TurnBubble should render the widget inline because the panel is gone.
+		const blocks: Block[] = [
+			{
+				kind: 'tool_call',
+				id: 'tw1',
+				name: 'TodoWrite',
+				input: {
+					todos: [
+						{ content: 'A', status: 'completed', activeForm: 'Doing A' }
+					]
+				},
+				result: 'ok',
+				is_error: false
+			}
+		];
+		const { container } = render(TurnBubble, {
+			props: { message: assistantMessage({ blocks }) }
+		});
+		expect(container.querySelector('.todo-list')).not.toBeNull();
+	});
+
 	it('merges multiple TodoWrite calls into a single widget showing latest state', () => {
 		// The agent calls TodoWrite repeatedly to update statuses. We want the
 		// widget to "fill in place" — the list appears once at the first
