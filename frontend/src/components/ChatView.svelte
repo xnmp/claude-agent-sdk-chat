@@ -147,7 +147,7 @@
 	.messages {
 		flex: 1;
 		overflow-y: auto;
-		padding: 24px 0;
+		padding: 28px 0 8px;
 	}
 
 	.messages-inner {
@@ -165,21 +165,23 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 12px;
+		gap: 10px;
 	}
 
 	.empty-icon {
 		color: var(--text-dim);
-		margin-bottom: 4px;
+		margin-bottom: 6px;
+		opacity: 0.6;
 	}
 
 	.empty-state h2 {
 		font-family: var(--font-display);
-		font-size: 1.5rem;
-		font-weight: 400;
+		font-size: 1.625rem;
+		font-weight: 500;
 		font-style: italic;
 		color: var(--text);
 		letter-spacing: -0.02em;
+		font-optical-sizing: auto;
 	}
 
 	.empty-state p {

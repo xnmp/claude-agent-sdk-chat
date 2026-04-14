@@ -84,16 +84,16 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px;
-		height: 32px;
+		width: 30px;
+		height: 30px;
 		border-radius: var(--radius-sm);
-		color: var(--text-muted);
-		transition: all 0.15s ease;
+		color: var(--text-dim);
+		transition: color var(--transition-fast), background var(--transition-fast);
 	}
 
 	.settings-btn:hover {
 		background: var(--bg-hover);
-		color: var(--text);
+		color: var(--text-secondary);
 	}
 
 	.backdrop {

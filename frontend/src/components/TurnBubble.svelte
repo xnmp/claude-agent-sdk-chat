@@ -149,14 +149,14 @@
 
 <style>
 	.turn {
-		padding: 6px 0;
+		padding: 5px 0;
 	}
 
 	.bubble {
-		max-width: 88%;
-		padding: 14px 18px;
+		max-width: 86%;
+		padding: 13px 17px;
 		border-radius: var(--radius-lg);
-		line-height: 1.6;
+		line-height: 1.62;
 		font-size: 0.9375rem;
 	}
 
@@ -165,8 +165,8 @@
 		background: var(--accent);
 		color: white;
 		margin-left: auto;
-		border-bottom-right-radius: 4px;
-		box-shadow: var(--shadow-sm);
+		border-bottom-right-radius: 3px;
+		box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.06);
 	}
 
 	.user-bubble p {
@@ -178,7 +178,7 @@
 	.assistant-bubble {
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
-		border-bottom-left-radius: 4px;
+		border-bottom-left-radius: 3px;
 		box-shadow: var(--shadow-sm);
 	}
 
@@ -188,7 +188,7 @@
 
 	/* Markdown typography */
 	.response-text.markdown :global(p) {
-		margin: 0 0 0.6em;
+		margin: 0 0 0.65em;
 	}
 
 	.response-text.markdown :global(p:last-child) {
@@ -199,9 +199,10 @@
 	.response-text.markdown :global(h2),
 	.response-text.markdown :global(h3),
 	.response-text.markdown :global(h4) {
-		margin: 0.8em 0 0.4em;
+		margin: 1em 0 0.4em;
 		font-weight: 600;
 		line-height: 1.3;
+		letter-spacing: -0.01em;
 	}
 
 	.response-text.markdown :global(h1) { font-size: 1.3em; }
@@ -215,69 +216,79 @@
 	}
 
 	.response-text.markdown :global(li) {
-		margin: 0.2em 0;
+		margin: 0.25em 0;
 	}
 
 	.response-text.markdown :global(code) {
-		font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-		font-size: 0.875em;
-		background: var(--bg-inset, rgba(0, 0, 0, 0.06));
-		padding: 0.15em 0.35em;
+		font-family: var(--font-mono);
+		font-size: 0.84em;
+		background: var(--bg-inset);
+		padding: 0.14em 0.38em;
 		border-radius: 4px;
+		border: 1px solid var(--border);
 	}
 
 	.response-text.markdown :global(pre) {
-		margin: 0.6em 0;
-		padding: 0.8em 1em;
-		background: var(--bg-inset, rgba(0, 0, 0, 0.06));
-		border-radius: var(--radius-sm, 6px);
+		margin: 0.7em 0;
+		padding: 0.85em 1.05em;
+		background: var(--bg-inset);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
 		overflow-x: auto;
 	}
 
 	.response-text.markdown :global(pre code) {
 		background: none;
 		padding: 0;
-		font-size: 0.85em;
+		border: none;
+		font-size: 0.84em;
 	}
 
 	.response-text.markdown :global(blockquote) {
-		margin: 0.5em 0;
-		padding: 0.3em 0.8em;
-		border-left: 3px solid var(--accent, #6366f1);
-		color: var(--text-dim, #666);
+		margin: 0.6em 0;
+		padding: 0.35em 0.9em;
+		border-left: 2.5px solid var(--accent);
+		color: var(--text-secondary);
+		background: var(--accent-subtle);
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 	}
 
 	.response-text.markdown :global(a) {
-		color: var(--accent, #6366f1);
+		color: var(--accent);
 		text-decoration: underline;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 2px;
 	}
 
 	.response-text.markdown :global(table) {
 		border-collapse: collapse;
-		margin: 0.5em 0;
+		margin: 0.6em 0;
 		width: 100%;
+		font-size: 0.9em;
 	}
 
 	.response-text.markdown :global(th),
 	.response-text.markdown :global(td) {
-		border: 1px solid var(--border, #e2e8f0);
-		padding: 0.4em 0.7em;
+		border: 1px solid var(--border);
+		padding: 0.45em 0.75em;
 		text-align: left;
 	}
 
 	.response-text.markdown :global(th) {
 		font-weight: 600;
-		background: var(--bg-inset, rgba(0, 0, 0, 0.03));
+		background: var(--bg-inset);
+		font-size: 0.8125em;
+		letter-spacing: 0.02em;
+		text-transform: uppercase;
 	}
 
 	.response-text.markdown :global(hr) {
 		border: none;
-		border-top: 1px solid var(--border, #e2e8f0);
-		margin: 0.8em 0;
+		border-top: 1px solid var(--border);
+		margin: 1em 0;
 	}
 
-	/* Per-block spacing — each block gets a margin so interleaved text and
-	   tool calls don't collapse into each other. */
+	/* Per-block spacing */
 	.bubble > :global(.response-text + .response-text),
 	.bubble > :global(.response-text + .tool-call),
 	.bubble > :global(.tool-call + .response-text),
@@ -289,7 +300,7 @@
 		margin-top: 10px;
 	}
 
-	/* Inline thinking block — collapsed by default, click to expand. */
+	/* Inline thinking block */
 	.thinking-block {
 		border-radius: var(--radius);
 		background: var(--thinking-bg);
@@ -307,6 +318,11 @@
 		color: var(--text-muted);
 		cursor: pointer;
 		user-select: none;
+		transition: color var(--transition-fast);
+	}
+
+	.thinking-block summary:hover {
+		color: var(--text-secondary);
 	}
 
 	.thinking-block summary::-webkit-details-marker { display: none; }
@@ -320,6 +336,7 @@
 		color: var(--text-muted);
 		line-height: 1.6;
 		margin: 0;
+		border-top: 1px solid var(--thinking-border);
 	}
 
 	/* Meta info */
@@ -328,11 +345,12 @@
 		align-items: center;
 		gap: 6px;
 		margin-top: 10px;
-		padding-top: 10px;
+		padding-top: 9px;
 		border-top: 1px solid var(--border);
-		font-size: 0.75rem;
+		font-size: 0.6875rem;
 		color: var(--text-dim);
 		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.02em;
 	}
 
 	.meta-sep {
@@ -344,34 +362,38 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px;
+		gap: 5px;
 		margin-top: 8px;
 		padding-top: 8px;
 		border-top: 1px solid var(--border);
-		font-size: 0.75rem;
 	}
 
 	.files-label {
+		font-size: 0.6875rem;
 		color: var(--text-dim);
-		font-weight: 500;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 	}
 
 	.file-link {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		padding: 3px 8px;
+		padding: 3px 9px 3px 7px;
 		background: var(--accent-subtle);
 		color: var(--accent);
+		border: 1px solid var(--accent-muted);
 		border-radius: var(--radius-sm);
 		font-family: var(--font-mono);
 		font-size: 0.6875rem;
 		text-decoration: none;
-		transition: background 0.12s ease;
+		transition: background var(--transition-fast), border-color var(--transition-fast);
 	}
 
 	.file-link:hover {
 		background: var(--accent-muted);
+		border-color: var(--accent);
 		text-decoration: none;
 	}
 
@@ -380,22 +402,22 @@
 		display: flex;
 		align-items: center;
 		gap: 5px;
-		padding: 4px 0;
+		padding: 4px 0 2px;
 	}
 
 	.streaming-status {
 		font-size: 0.75rem;
 		color: var(--text-dim);
-		margin-left: 4px;
+		margin-left: 3px;
 		font-style: italic;
 	}
 
 	.dot {
-		width: 7px;
-		height: 7px;
+		width: 6px;
+		height: 6px;
 		border-radius: 50%;
 		background: var(--accent);
-		opacity: 0.35;
+		opacity: 0.3;
 		animation: pulse 1.4s ease-in-out infinite;
 	}
 
@@ -412,11 +434,11 @@
 		80%,
 		100% {
 			opacity: 0.2;
-			transform: scale(0.85);
+			transform: scale(0.8);
 		}
 		40% {
 			opacity: 1;
-			transform: scale(1);
+			transform: scale(1.1);
 		}
 	}
 </style>
