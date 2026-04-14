@@ -1,6 +1,7 @@
 from .settings import (
     AGENT_CWD,
     ANTHROPIC_API_KEY,
+    ANTHROPIC_AUTH_TOKEN,
     ANTHROPIC_BASE_URL,
     ANTHROPIC_MODEL,
     ANTHROPIC_SMALL_FAST_MODEL,
@@ -14,6 +15,7 @@ from .settings import (
 __all__ = [
     "AGENT_CWD",
     "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
     "ANTHROPIC_BASE_URL",
     "ANTHROPIC_MODEL",
     "ANTHROPIC_SMALL_FAST_MODEL",

@@ -18,10 +18,11 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import TextBlock
 
-from ..config import ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, ANTHROPIC_SMALL_FAST_MODEL
+from ..config import ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, ANTHROPIC_SMALL_FAST_MODEL
 from .claude_credentials import load_oauth_credentials
 
 logger = logging.getLogger(__name__)
@@ -41,13 +42,18 @@ def _base_url_kwarg() -> dict[str, str]:
     if ANTHROPIC_BASE_URL and ANTHROPIC_BASE_URL.startswith("http"):
         return {"base_url": ANTHROPIC_BASE_URL}
     # Prevent the SDK from picking up an empty ANTHROPIC_BASE_URL from env
+    logger.warning("Using default base URL for Anthropic API; set ANTHROPIC_BASE_URL to override.")
     return {"base_url": "https://api.anthropic.com"}
+
+
+def _http_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(verify=False)
 
 
 def _get_client() -> _ClientHandle | None:
     # Prefer a real API key when explicitly configured
     if ANTHROPIC_API_KEY and ANTHROPIC_API_KEY.startswith("sk-ant-api"):
-        kwargs: dict[str, Any] = {"api_key": ANTHROPIC_API_KEY, **_base_url_kwarg()}
+        kwargs: dict[str, Any] = {"api_key": ANTHROPIC_API_KEY, "http_client": _http_client(), **_base_url_kwarg()}
         return _ClientHandle(AsyncAnthropic(**kwargs), is_oauth=False)
 
     # Fall back to Claude Code's OAuth credentials
@@ -56,9 +62,22 @@ def _get_client() -> _ClientHandle | None:
         oauth_kwargs: dict[str, Any] = {
             "auth_token": creds.access_token,
             "default_headers": {"anthropic-beta": "oauth-2025-04-20"},
+            "http_client": _http_client(),
             **_base_url_kwarg(),
         }
         return _ClientHandle(AsyncAnthropic(**oauth_kwargs), is_oauth=True)
+
+    # Fall back to a Bearer token (e.g. corporate/AIPE gateway auth).
+    if ANTHROPIC_AUTH_TOKEN:
+        print("Using ANTHROPIC_AUTH_TOKEN for background LLM tasks; make sure this is intentional and secure.")
+        print(ANTHROPIC_AUTH_TOKEN)
+        print(_base_url_kwarg())
+        token_kwargs: dict[str, Any] = {
+            "auth_token": ANTHROPIC_AUTH_TOKEN,
+            "http_client": _http_client(),
+            **_base_url_kwarg(),
+        }
+        return _ClientHandle(AsyncAnthropic(**token_kwargs), is_oauth=False)
 
     return None
 

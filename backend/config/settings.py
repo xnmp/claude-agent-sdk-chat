@@ -20,6 +20,10 @@ AGENT_CWD = os.environ.get("AGENT_CWD", os.getcwd())
 # Read here so it's available as a config value; validated at startup.
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
+# Optional Bearer token for corporate/proxy auth (e.g. AIPE gateway).
+# When set, passed as Authorization: Bearer instead of x-api-key.
+ANTHROPIC_AUTH_TOKEN = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+
 # Optional base URL override (e.g. for proxies or custom endpoints)
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
 
