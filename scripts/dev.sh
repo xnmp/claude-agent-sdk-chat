@@ -20,7 +20,13 @@ docker run -d --name claude-chat-postgres \
     -p 5433:5432 \
     postgres:17-alpine
 
-sleep 2
+echo "Waiting for Postgres to accept connections..."
+for i in {1..30}; do
+    if docker exec claude-chat-postgres pg_isready -U claude_chat -d claude_chat >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
 echo "Running schema..."
 docker exec -i claude-chat-postgres psql -U claude_chat -d claude_chat < "$ROOT/schema.sql"
 
