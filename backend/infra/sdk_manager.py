@@ -8,6 +8,7 @@ all downstream code depends only on domain types.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from loguru import logger
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -100,6 +101,7 @@ def _build_agent_env() -> dict[str, str]:
     credentials (OAuth from ~/.claude/), so we don't override it.
     """
     if not AUTH_PROXY_ENABLED:
+        logger.info("auth proxy disabled; agent inherits parent env unchanged")
         return {}
 
     env: dict[str, str] = {}
@@ -123,11 +125,13 @@ def _build_agent_env() -> dict[str, str]:
     # Only override the API key when we have a real one to inject via proxy.
     # Otherwise let the CLI use its own stored credentials.
     if ANTHROPIC_API_KEY:
+        logger.info("Using auth proxy with injected API key; setting %s=proxy-managed", "ANTHROPIC_API_KEY")
         env["ANTHROPIC_API_KEY"] = "proxy-managed"
 
     # Point agent to the local auth proxy
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{AUTH_PROXY_PORT}"
 
+    logger.info("built agent env with keys={}", sorted(env.keys()))
     return env
 
 
@@ -171,15 +175,19 @@ class ClaudeSDKClientAdapter:
         self._open_blocks: dict[int, dict[str, Any]] = {}
 
     async def connect(self) -> None:
+        logger.debug("sdk adapter: connect")
         await self._client.connect()
 
     async def query(self, content: str) -> None:
+        logger.debug("sdk adapter: query len={}", len(content))
         await self._client.query(content)
 
     async def interrupt(self) -> None:
+        logger.info("sdk adapter: interrupt")
         await self._client.interrupt()
 
     async def disconnect(self) -> None:
+        logger.debug("sdk adapter: disconnect")
         await self._client.disconnect()
 
     def pop_created_files(self) -> list[str]:
@@ -191,9 +199,12 @@ class ClaudeSDKClientAdapter:
     async def receive_response(self) -> AsyncIterator[SDKEvent]:
         async for msg in self._client.receive_response():
             if isinstance(msg, StreamEvent):
+                # StreamEvents carry deltas; logged per-event at DEBUG inside
+                # _handle_stream_event to avoid spamming INFO with fragments.
                 for event in self._handle_stream_event(msg):
                     yield event
             elif isinstance(msg, AssistantMessage):
+                logger.info("sdk AssistantMessage: {}", msg)
                 # Content blocks (text/thinking/tool_use) come from stream events;
                 # only forward the model/usage metadata here. Tool *results* sometimes
                 # arrive as ToolResultBlocks on AssistantMessage in synthetic flows,
@@ -201,9 +212,11 @@ class ClaudeSDKClientAdapter:
                 for event in _translate_assistant_meta(msg):
                     yield event
             elif isinstance(msg, UserMessage):
+                logger.info("sdk UserMessage: {}", msg)
                 for event in _translate_user(msg):
                     yield event
             elif isinstance(msg, ResultMessage):
+                logger.info("sdk ResultMessage: {}", msg)
                 yield ResultEvent(
                     session_id=msg.session_id,
                     duration_ms=msg.duration_ms,
@@ -223,6 +236,7 @@ class ClaudeSDKClientAdapter:
         """
         ev = msg.event or {}
         et = ev.get("type")
+        logger.debug("stream event: {}", et)
 
         if et == "message_start":
             inner = ev.get("message") or {}
@@ -246,6 +260,7 @@ class ClaudeSDKClientAdapter:
         index = ev.get("index", 0)
         cb = ev.get("content_block") or {}
         cb_type = cb.get("type")
+        logger.debug("block start: index={} type={} name={}", index, cb_type, cb.get("name"))
 
         # Initialize state for this open block. Tool-use blocks need a buffer
         # for the partial JSON deltas that follow.
@@ -294,6 +309,7 @@ class ClaudeSDKClientAdapter:
     def _on_block_stop(self, ev: dict[str, Any]) -> list[SDKEvent]:
         index = ev.get("index", 0)
         block = self._open_blocks.pop(index, None)
+        logger.debug("block stop: index={} type={}", index, block.get("type") if block else None)
         if block is None or block.get("type") != "tool_use":
             return []
 
@@ -301,8 +317,10 @@ class ClaudeSDKClientAdapter:
         try:
             parsed_input = json.loads(json_buf) if json_buf else {}
         except json.JSONDecodeError:
+            logger.warning("tool_use block: failed to parse input JSON (index={}, name={})", index, block.get("name"))
             parsed_input = {}
 
+        logger.info("tool_use: name={} id={}", block.get("name"), block.get("id"))
         return [ToolUseEvent(
             id=block.get("id") or "",
             name=block.get("name") or "",
@@ -366,8 +384,14 @@ class SDKManager:
         await self._evict_idle()
 
         if session_id in self._clients:
+            logger.debug("sdk manager: reuse cached client session={}", session_id)
             self._last_access[session_id] = _now()
             return self._clients[session_id]
+
+        logger.info(
+            "sdk manager: creating client session={} resume={} model={}",
+            session_id, resume, ANTHROPIC_MODEL or "<default>",
+        )
 
         # Per-session subdirectories under shared output roots. The FastAPI
         # static mount still serves the whole AGENT_CWD/output tree at
@@ -422,16 +446,21 @@ class SDKManager:
         adapter = ClaudeSDKClientAdapter(client, hook_config["created_files"])
         self._clients[session_id] = adapter
         self._last_access[session_id] = _now()
+        logger.info(
+            "sdk manager: client ready session={} output_dir={} active_sessions={}",
+            session_id, output_dir, len(self._clients),
+        )
         return adapter
 
     async def remove(self, session_id: str) -> None:
         self._last_access.pop(session_id, None)
         adapter = self._clients.pop(session_id, None)
         if adapter:
+            logger.info("sdk manager: removing client session={}", session_id)
             try:
                 await adapter.disconnect()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("sdk manager: disconnect failed session={} error={}", session_id, exc)
 
     def has(self, session_id: str) -> bool:
         return session_id in self._clients
@@ -443,6 +472,8 @@ class SDKManager:
             sid for sid, ts in self._last_access.items()
             if now - ts > self._idle_ttl
         ]
+        if expired:
+            logger.info("sdk manager: evicting idle sessions={}", expired)
         for sid in expired:
             await self.remove(sid)
 
