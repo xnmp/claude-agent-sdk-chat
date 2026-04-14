@@ -8,13 +8,16 @@ FROM node:22-slim AS frontend-build
 WORKDIR /app/frontend
 
 # Copy manifest first so Docker caches the install layer when only
-# source files change.
-COPY frontend/package.json ./
+# source files change. --link keeps the COPY independent of any prior
+# layer state, so it stays cached even if earlier layers would change.
+COPY --link frontend/package.json ./
 # Lockfile committed (bun.lock) is for bun; we deliberately use npm here
 # per the image contract. No package-lock.json, so `npm install` (not ci).
-RUN npm install --no-audit --no-fund
+# Cache mount on /root/.npm avoids re-downloading packages on rebuilds.
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --no-audit --no-fund
 
-COPY frontend/ ./
+COPY --link frontend/ ./
 RUN npm run build
 
 
@@ -37,7 +40,13 @@ FROM python:3.12-slim-trixie AS runtime
 #   - git                    : agents frequently shell out to it
 #   - tini                   : proper signal handling for the python process
 #     (so SIGTERM from `docker stop` actually reaches uvicorn)
-RUN apt-get update \
+# Cache mounts keep the apt package cache and index files out of the final
+# image layer while reusing them across rebuilds. `docker-clean` is the
+# Debian-default post-install purge that would defeat the cache; remove it.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         nodejs \
         npm \
@@ -46,8 +55,7 @@ RUN apt-get update \
         curl \
         ca-certificates \
         git \
-        tini \
-    && rm -rf /var/lib/apt/lists/*
+        tini
 
 # Do NOT set bwrap setuid. In Docker, setuid binaries that try to call
 # capset fail because the container's ambient capabilities don't include
@@ -64,7 +72,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 
 # Install Claude CLI globally. Pinned to match the host install so behavior
 # is reproducible; bump deliberately when upgrading.
-RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code@2.1.108 \
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g --no-audit --no-fund @anthropic-ai/claude-code@2.1.108 \
     && claude --version
 
 # Non-root user for the running app. Keeping root for the install steps
@@ -80,24 +89,29 @@ RUN groupadd --system --gid 1001 app \
 
 WORKDIR /app
 
-# Copy Python project files first so `uv sync` is cached when only
-# source changes.
-COPY --chown=app:app pyproject.toml uv.lock ./
+# Copy Python project manifest + lockfile first so the expensive uv sync
+# layer only invalidates when deps actually change.
+COPY --link --chown=1001:1001 pyproject.toml uv.lock ./
 
 # Install Python deps into a venv at /app/.venv using the frozen lockfile.
 # --no-dev excludes test/dev extras. uv finds the system Python at
 # /usr/local/bin/python which is already world-executable, so no
-# cross-user permission fixups needed.
-RUN uv sync --frozen --no-dev
+# cross-user permission fixups needed. Cache mount on uv's wheel cache
+# eliminates the re-download cost when deps are added/upgraded.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
-# Copy backend source, MCP server source, and schema.
-COPY --chown=app:app backend/ ./backend/
-COPY --chown=app:app mytools/ ./mytools/
-COPY --chown=app:app schema.sql ./schema.sql
+# Copy source in least-volatile → most-volatile order. schema.sql barely
+# changes, mytools changes occasionally, backend changes often, frontend
+# build output changes often. Ordering this way maximizes cache hits on
+# the typical "edited a backend file" rebuild.
+COPY --link --chown=1001:1001 schema.sql ./schema.sql
+COPY --link --chown=1001:1001 mytools/ ./mytools/
+COPY --link --chown=1001:1001 backend/ ./backend/
 
 # Copy the built frontend from stage 1 into the location backend/app.py
 # looks for it at startup.
-COPY --from=frontend-build --chown=app:app /app/frontend/build ./frontend/build
+COPY --link --from=frontend-build --chown=1001:1001 /app/frontend/build ./frontend/build
 
 # Writable workspace for the agent: outputs, scripts, uploads, docs.
 # Created here so the layer has correct ownership; in compose this is
