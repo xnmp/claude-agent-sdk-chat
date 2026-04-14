@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import Sidebar from '../components/Sidebar.svelte';
 	import ChatView from '../components/ChatView.svelte';
 	import Login from '../components/Login.svelte';
-	import type { Conversation, Message, LiveTurn, WsMessage, AssistantContent, User } from '$lib/types';
+	import type { Block, Conversation, Message, LiveTurn, WsMessage, AssistantContent, User } from '$lib/types';
 	import { listConversations, createConversation, getMessages, deleteConversation, login, uploadFile } from '$lib/api';
 	import { createWsClient, type WsClient, type WsStatus } from '$lib/ws';
 	import { processWsMessage } from '$lib/liveTurnReducer';
@@ -24,6 +24,100 @@
 	// Per-conversation background streaming state
 	interface BgStream { turn: LiveTurn; suggestions: string[]; ws: WsClient; done: boolean }
 	const bgStreams = new Map<string, BgStream>();
+
+	// -- Typewriter ticker --------------------------------------------------
+	//
+	// Every text block (live or just-finalized) carries a `revealed` cursor
+	// separately from its `text`. SDK deltas grow `text`. This ticker — the
+	// ONLY writer of `revealed` — advances each cursor toward text.length at
+	// a steady base pace, with a backlog-proportional boost so long responses
+	// don't fall arbitrarily far behind. Rendering reads `text.slice(0, revealed)`.
+	//
+	// Because the cursor lives on the block itself, finalize doesn't need any
+	// special handling: the persisted message's blocks are the same references
+	// we've been advancing, and the ticker keeps going until they're drained.
+
+	let typewriterFrameId: number | null = null;
+	let typewriterLastTime = 0;
+
+	function advanceBlocks(blocks: Block[], dt: number): boolean {
+		let anyProgress = false;
+		for (const block of blocks) {
+			if (block.kind !== 'text') continue;
+			const remaining = block.text.length - block.revealed;
+			if (remaining <= 0) continue;
+
+			// Base pace: ~60 chars/sec (one char per frame at 60fps).
+			const baseChars = 0.06 * dt;
+			// Backlog boost: when further than 40 chars behind, accelerate in
+			// proportion to the backlog. 0.003 * dt means a 500-char backlog
+			// adds ~1.4 chars/ms (≈1400 chars/sec) before the per-frame cap.
+			const backlogChars = Math.max(0, remaining - 40) * 0.003 * dt;
+			// Cap per frame so even enormous backlogs still look progressive
+			// rather than dumping all at once. 6 chars/frame * 60fps = 360 chars/sec.
+			const advance = Math.min(
+				6,
+				Math.max(1, Math.ceil(baseChars + backlogChars))
+			);
+			block.revealed = Math.min(block.text.length, block.revealed + advance);
+			anyProgress = true;
+		}
+		return anyProgress;
+	}
+
+	function typewriterTick(now: number) {
+		const dt = Math.min(100, Math.max(0, now - typewriterLastTime));
+		typewriterLastTime = now;
+
+		let anyProgress = false;
+
+		if (liveTurn) {
+			if (advanceBlocks(liveTurn.blocks, dt)) anyProgress = true;
+		}
+		// Also drain any freshly-finalized messages whose cursors still have
+		// work to do. Once `revealed === text.length` for all blocks they
+		// drop out of this loop naturally.
+		for (const msg of messages) {
+			if (msg.role !== 'assistant') continue;
+			const content = msg.content as AssistantContent;
+			if (advanceBlocks(content.blocks as Block[], dt)) anyProgress = true;
+		}
+
+		if (anyProgress) {
+			typewriterFrameId = requestAnimationFrame(typewriterTick);
+		} else {
+			typewriterFrameId = null;
+		}
+	}
+
+	function kickTypewriter() {
+		if (typewriterFrameId !== null) return;
+		typewriterLastTime = performance.now();
+		typewriterFrameId = requestAnimationFrame(typewriterTick);
+	}
+
+	/**
+	 * Historical messages loaded from the API should render instantly — no
+	 * fake typewriter replay for text the user already saw. Mark every text
+	 * block as fully revealed up-front.
+	 */
+	function normalizeLoadedMessages(msgs: Message[]): Message[] {
+		return msgs.map((m) => {
+			if (m.role !== 'assistant') return m;
+			const content = m.content as AssistantContent;
+			const blocks = content.blocks.map((b) =>
+				b.kind === 'text' ? { ...b, revealed: b.text.length } : b
+			);
+			return { ...m, content: { ...content, blocks } };
+		});
+	}
+
+	onDestroy(() => {
+		if (typewriterFrameId !== null) {
+			cancelAnimationFrame(typewriterFrameId);
+			typewriterFrameId = null;
+		}
+	});
 
 	onMount(() => {
 		applyTheme(settings.theme);
@@ -94,14 +188,14 @@
 		suggestions = [];
 
 		activeConversationId = id;
-		messages = await getMessages(id);
+		messages = normalizeLoadedMessages(await getMessages(id));
 
 		// Restore from background stream if one exists
 		const bg = bgStreams.get(id);
 		if (bg) {
 			if (bg.done) {
 				// Turn completed in background — reload messages
-				messages = await getMessages(id);
+				messages = normalizeLoadedMessages(await getMessages(id));
 				suggestions = bg.suggestions;
 				bg.ws.disconnect();
 				bgStreams.delete(id);
@@ -210,6 +304,7 @@
 						// If user is viewing this conversation, sync to UI
 						if (activeConversationId === convId) {
 							liveTurn = bg.turn;
+							kickTypewriter();
 						}
 					} else if (action.kind === 'finalize') {
 						bg.done = true;
@@ -255,6 +350,7 @@
 		liveTurn = null;
 		isStreaming = false;
 		suggestions = [];
+		kickTypewriter();
 		const bg = bgStreams.get(convId);
 		if (bg) { bg.ws.disconnect(); bgStreams.delete(convId); }
 		loadConversations();
@@ -289,10 +385,17 @@
 		switch (action.kind) {
 			case 'update':
 				liveTurn = action.turn;
+				// A delta just grew one of the text blocks — make sure the
+				// typewriter ticker is running so the new chars get revealed.
+				kickTypewriter();
 				break;
 
 			case 'finalize':
 				if (msg.type === 'result') {
+					// Hand the live block list directly to the persisted message.
+					// The `revealed` cursors on each block carry over with their
+					// current values, so the typewriter keeps draining them
+					// after the live→persisted swap — no snap.
 					const assistantMsg: Message = {
 						id: crypto.randomUUID(),
 						conversation_id: activeConversationId!,
@@ -312,6 +415,9 @@
 				liveTurn = null;
 				isStreaming = false;
 				suggestions = [];
+				// Keep the ticker alive to drain the block we just transferred
+				// to `messages`.
+				kickTypewriter();
 				loadConversations();
 				break;
 

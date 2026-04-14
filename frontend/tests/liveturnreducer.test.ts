@@ -89,7 +89,9 @@ describe('processWsMessage', () => {
 		}
 	});
 
-	it('appends a text block on assistant_text', () => {
+	it('appends a fully-revealed text block on assistant_text', () => {
+		// The non-streaming path already has the full text on arrival, so the
+		// reducer sets `revealed` to the text length — no typewriter replay.
 		const msg: WsMessage = { type: 'assistant_text', text: 'Hello!', message_id: 'm1' };
 		const action = processWsMessage(msg, emptyTurn());
 
@@ -98,7 +100,46 @@ describe('processWsMessage', () => {
 			const block = action.turn.blocks[0];
 			if (block.kind === 'text') {
 				expect(block.text).toBe('Hello!');
+				expect(block.revealed).toBe('Hello!'.length);
 			}
+		}
+	});
+
+	it('opens streaming text_block_start with revealed=0', () => {
+		const action = processWsMessage(
+			{ type: 'text_block_start', block_index: 0, message_id: 'm1' },
+			emptyTurn()
+		);
+		if (action.kind === 'update') {
+			const block = action.turn.blocks[0];
+			if (block.kind === 'text') {
+				// A fresh streaming block is completely un-revealed — the ticker
+				// in +page.svelte owns the advance from here.
+				expect(block.revealed).toBe(0);
+			}
+		}
+	});
+
+	it('text_delta grows text but leaves revealed untouched', () => {
+		let turn: LiveTurn | null = emptyTurn();
+		turn = (
+			processWsMessage(
+				{ type: 'text_block_start', block_index: 0, message_id: 'm1' },
+				turn
+			) as { turn: LiveTurn }
+		).turn;
+		turn = (
+			processWsMessage(
+				{ type: 'text_delta', text: 'Hello world', block_index: 0, message_id: 'm1' },
+				turn
+			) as { turn: LiveTurn }
+		).turn;
+
+		const block = turn.blocks[0];
+		if (block.kind === 'text') {
+			expect(block.text).toBe('Hello world');
+			// Reducer must not touch revealed — the ticker owns that cursor.
+			expect(block.revealed).toBe(0);
 		}
 	});
 
@@ -121,8 +162,8 @@ describe('processWsMessage', () => {
 
 		expect(kinds(turn)).toEqual(['text', 'text']);
 		const texts = turn.blocks
-			.filter((b): b is { kind: 'text'; text: string } => b.kind === 'text')
-			.map((b) => b.text);
+			.filter((b) => b.kind === 'text')
+			.map((b) => (b as { text: string }).text);
 		expect(texts).toEqual(['partial', 'continued']);
 	});
 
@@ -254,7 +295,7 @@ describe('processWsMessage', () => {
 
 	it('returns finalize on result', () => {
 		const turn = emptyTurn();
-		turn.blocks = [{ kind: 'text', text: 'done' }];
+		turn.blocks = [{ kind: 'text', text: 'done', revealed: 4 }];
 
 		const msg: WsMessage = {
 			type: 'result',

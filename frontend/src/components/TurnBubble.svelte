@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Block, Message, UserContent, AssistantContent, LiveTurn, ToolCallBlock } from '$lib/types';
 	import type { Settings } from '$lib/settings';
-	import { renderMarkdown } from '$lib/markdown';
+	import StreamingMarkdown from './StreamingMarkdown.svelte';
 	import ToolCall from './ToolCall.svelte';
 
 	let {
@@ -61,7 +61,9 @@
 		<div class="bubble assistant-bubble">
 			{#each blocks as block, idx (idx)}
 				{#if block.kind === 'text'}
-					<div class="response-text markdown">{@html renderMarkdown(block.text)}</div>
+					<div class="response-text markdown">
+						<StreamingMarkdown text={block.text} revealed={block.revealed} />
+					</div>
 				{:else if block.kind === 'thinking'}
 					<details class="thinking-block">
 						<summary>

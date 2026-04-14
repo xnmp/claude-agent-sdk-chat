@@ -20,7 +20,7 @@ function assistantMessage(overrides: Partial<AssistantContent> = {}): Message {
 		conversation_id: 'conv-1',
 		role: 'assistant',
 		content: {
-			blocks: [{ kind: 'text', text: 'Response text' }],
+			blocks: [{ kind: 'text', text: 'Response text', revealed: 'Response text'.length }],
 			model: 'claude-sonnet-4-20250514',
 			usage: {},
 			duration_ms: 1500,
@@ -49,7 +49,7 @@ describe('TurnBubble', () => {
 		render(TurnBubble, {
 			props: {
 				message: assistantMessage({
-					blocks: [{ kind: 'text', text: 'The answer is 42' }]
+					blocks: [{ kind: 'text', text: 'The answer is 42', revealed: 16 }]
 				})
 			}
 		});
@@ -59,7 +59,7 @@ describe('TurnBubble', () => {
 	it('renders interleaved text blocks in order', () => {
 		// Regression: a turn with text → tool → text used to drop the first text.
 		const blocks: Block[] = [
-			{ kind: 'text', text: 'let me check' },
+			{ kind: 'text', text: 'let me check', revealed: 12 },
 			{
 				kind: 'tool_call',
 				id: 't1',
@@ -68,7 +68,7 @@ describe('TurnBubble', () => {
 				result: 'contents',
 				is_error: false
 			},
-			{ kind: 'text', text: 'all set' }
+			{ kind: 'text', text: 'all set', revealed: 7 }
 		];
 		const { container } = render(TurnBubble, {
 			props: { message: assistantMessage({ blocks }) }
@@ -112,7 +112,7 @@ describe('TurnBubble', () => {
 			props: {
 				message: assistantMessage({
 					blocks: [
-						{ kind: 'text', text: 'reading the file' },
+						{ kind: 'text', text: 'reading the file', revealed: 16 },
 						{
 							kind: 'tool_call',
 							id: 't1',
@@ -137,10 +137,13 @@ describe('TurnBubble', () => {
 		expect(container.querySelectorAll('.dot')).toHaveLength(3);
 	});
 
-	it('shows text for live turn with text block', () => {
+	it('shows text for live turn with a fully-revealed text block', () => {
+		// The typewriter cursor (revealed) is owned by +page.svelte's ticker,
+		// not TurnBubble. In a unit test we just pass the block with its
+		// desired visible cursor already set.
 		const liveTurn: LiveTurn = {
 			startedAt: Date.now(),
-			blocks: [{ kind: 'text', text: 'Streaming...' }]
+			blocks: [{ kind: 'text', text: 'Streaming...', revealed: 'Streaming...'.length }]
 		};
 		render(TurnBubble, { props: { liveTurn, isLive: true } });
 		expect(screen.getByText('Streaming...')).toBeInTheDocument();
