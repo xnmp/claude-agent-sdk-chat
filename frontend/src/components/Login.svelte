@@ -74,28 +74,38 @@
 		justify-content: center;
 		width: 100%;
 		height: 100%;
-		background: var(--bg);
+		/* Subtle warm radial gradient — builds on token palette */
+		background:
+			radial-gradient(ellipse 70% 60% at 50% 35%, rgba(184, 90, 71, 0.055) 0%, transparent 70%),
+			var(--bg);
 		padding: 24px;
+	}
+
+	:global([data-theme='dark']) .login-container {
+		background:
+			radial-gradient(ellipse 70% 60% at 50% 35%, rgba(196, 106, 85, 0.08) 0%, transparent 70%),
+			var(--bg);
 	}
 
 	.login-card {
 		width: 100%;
-		max-width: 400px;
+		max-width: 380px;
 	}
 
 	.login-header {
 		text-align: center;
-		margin-bottom: 32px;
+		margin-bottom: 28px;
 	}
 
 	h1 {
 		font-family: var(--font-display);
-		font-size: 2rem;
-		font-weight: 400;
+		font-size: 2.125rem;
+		font-weight: 500;
 		font-style: italic;
 		color: var(--text);
-		letter-spacing: -0.02em;
-		margin-bottom: 6px;
+		letter-spacing: -0.025em;
+		margin-bottom: 7px;
+		font-optical-sizing: auto;
 	}
 
 	.subtitle {
@@ -106,12 +116,12 @@
 	.login-form {
 		display: flex;
 		flex-direction: column;
-		gap: 20px;
-		padding: 32px;
+		gap: 18px;
+		padding: 30px;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		box-shadow: var(--shadow-lg);
+		border-radius: var(--radius-xl);
+		box-shadow: var(--shadow-lg), 0 0 0 1px rgba(184, 90, 71, 0.04);
 	}
 
 	label {
@@ -135,19 +145,20 @@
 
 	input {
 		padding: 10px 14px;
-		background: var(--bg);
+		background: var(--bg-inset);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		color: var(--text);
 		font: inherit;
 		font-size: 0.9375rem;
 		outline: none;
-		transition: all 0.2s ease;
+		transition: border-color var(--transition-base), box-shadow var(--transition-base);
 	}
 
 	input:focus {
 		border-color: var(--accent);
 		box-shadow: var(--shadow-glow);
+		background: var(--bg-surface);
 	}
 
 	input::placeholder {
@@ -175,7 +186,7 @@
 		font-size: 0.9375rem;
 		font-weight: 600;
 		letter-spacing: 0.01em;
-		transition: all 0.15s ease;
+		transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 		box-shadow: var(--shadow-sm);
 		margin-top: 4px;
 	}
@@ -184,6 +195,10 @@
 		background: var(--accent-hover);
 		box-shadow: var(--shadow-md);
 		transform: translateY(-0.5px);
+	}
+
+	.login-btn:active:not(:disabled) {
+		transform: translateY(0);
 	}
 
 	.login-btn:disabled {

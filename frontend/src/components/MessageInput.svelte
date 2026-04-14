@@ -178,21 +178,21 @@
 
 <style>
 	.input-area {
-		padding: 0 24px 16px;
+		padding: 0 24px 18px;
 		max-width: 768px;
 		margin: 0 auto;
 		width: 100%;
-		transition: outline 0.15s ease;
+		transition: outline var(--transition-fast);
 	}
 
 	.input-area.dragging {
 		outline: 2px dashed var(--accent);
 		outline-offset: -2px;
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-xl);
 	}
 
 	.suggestions-section {
-		margin-bottom: 6px;
+		margin-bottom: 8px;
 	}
 
 	.suggestions-toggle {
@@ -200,10 +200,12 @@
 		align-items: center;
 		gap: 4px;
 		font-size: 0.6875rem;
-		font-weight: 500;
+		font-weight: 600;
 		color: var(--text-dim);
 		padding: 2px 0;
-		letter-spacing: 0.02em;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		transition: color var(--transition-fast);
 	}
 
 	.suggestions-toggle:hover {
@@ -211,7 +213,7 @@
 	}
 
 	.toggle-chevron {
-		transition: transform 0.15s ease;
+		transition: transform var(--transition-base);
 	}
 
 	.toggle-chevron.open {
@@ -221,20 +223,20 @@
 	.suggestions-chips {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
-		margin-top: 4px;
+		gap: 5px;
+		margin-top: 6px;
 	}
 
 	.suggestion-chip {
-		padding: 4px 10px;
+		padding: 5px 11px;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
-		font-size: 0.6875rem;
+		font-size: 0.8125rem;
 		color: var(--text-secondary);
-		transition: all 0.12s ease;
+		transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 		text-align: left;
-		line-height: 1.3;
+		line-height: 1.35;
 	}
 
 	.suggestion-chip:hover {
@@ -282,7 +284,7 @@
 		padding: 1px;
 		color: var(--text-dim);
 		border-radius: 3px;
-		transition: all 0.12s ease;
+		transition: color var(--transition-fast), background var(--transition-fast);
 	}
 
 	.remove-file:hover {
@@ -294,11 +296,11 @@
 		display: flex;
 		gap: 8px;
 		align-items: flex-end;
-		background: var(--bg-surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
-		padding: 10px 12px 10px 12px;
-		transition: all 0.2s ease;
+		background: var(--composer-bg, var(--bg-surface));
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-xl);
+		padding: 11px 12px 11px 14px;
+		transition: border-color var(--transition-base), box-shadow var(--transition-base);
 		box-shadow: var(--shadow-md);
 	}
 
@@ -312,11 +314,11 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px;
-		height: 32px;
+		width: 30px;
+		height: 30px;
 		border-radius: var(--radius-sm);
 		color: var(--text-muted);
-		transition: all 0.15s ease;
+		transition: color var(--transition-fast), background var(--transition-fast);
 	}
 
 	.attach-btn:hover:not(:disabled) {
@@ -339,7 +341,7 @@
 		outline: none;
 		min-height: 24px;
 		max-height: 200px;
-		line-height: 1.55;
+		line-height: 1.58;
 		field-sizing: content;
 	}
 
@@ -366,7 +368,7 @@
 		font-size: 0.8125rem;
 		font-weight: 600;
 		letter-spacing: 0.01em;
-		transition: all 0.15s ease;
+		transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
 	}
 
 	.send {
@@ -381,8 +383,13 @@
 		transform: translateY(-0.5px);
 	}
 
+	.send:active:not(:disabled) {
+		transform: translateY(0);
+		box-shadow: var(--shadow-sm);
+	}
+
 	.send:disabled {
-		opacity: 0.35;
+		opacity: 0.32;
 		cursor: not-allowed;
 		transform: none;
 		box-shadow: none;
@@ -400,18 +407,18 @@
 
 	.hint {
 		text-align: center;
-		font-size: 0.6875rem;
+		font-size: 0.625rem;
 		color: var(--text-dim);
-		margin-top: 8px;
-		letter-spacing: 0.02em;
+		margin-top: 9px;
+		letter-spacing: 0.03em;
 	}
 
 	kbd {
 		font-family: var(--font-mono);
-		font-size: 0.625rem;
+		font-size: 0.5625rem;
 		padding: 1px 5px;
 		border-radius: 4px;
-		border: 1px solid var(--border);
+		border: 1px solid var(--border-strong);
 		background: var(--bg-inset);
 	}
 </style>

@@ -202,7 +202,7 @@
 
 <style>
 	.sidebar {
-		background: var(--bg-surface);
+		background: var(--sidebar-bg);
 		border-right: 1px solid var(--border);
 		display: flex;
 		flex-direction: column;
@@ -227,7 +227,7 @@
 		justify-content: center;
 		position: relative;
 		flex-shrink: 0;
-		transition: background 0.12s ease;
+		transition: background var(--transition-fast);
 	}
 
 	.resize-handle:hover {
@@ -251,7 +251,7 @@
 		border-radius: var(--radius-sm);
 		color: var(--text-dim);
 		opacity: 0;
-		transition: opacity 0.15s ease;
+		transition: opacity var(--transition-fast), background var(--transition-fast);
 		z-index: 10;
 	}
 
@@ -269,31 +269,34 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 20px 20px 16px;
+		padding: 18px 16px 14px;
+		gap: 8px;
 	}
 
 	h2 {
 		font-family: var(--font-display);
-		font-size: 1.125rem;
-		font-weight: 400;
+		font-size: 1.0625rem;
+		font-weight: 500;
 		font-style: italic;
-		color: var(--text);
+		color: var(--text-secondary);
 		letter-spacing: -0.01em;
+		font-optical-sizing: auto;
 	}
 
 	.new-btn {
 		display: flex;
 		align-items: center;
 		gap: 5px;
-		padding: 7px 14px;
+		padding: 6px 13px;
 		border-radius: var(--radius);
 		background: var(--accent);
 		color: white;
 		font-size: 0.8125rem;
 		font-weight: 600;
 		letter-spacing: 0.01em;
-		transition: all 0.15s ease;
+		transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 		box-shadow: var(--shadow-sm);
+		flex-shrink: 0;
 	}
 
 	.new-btn:hover {
@@ -302,10 +305,15 @@
 		transform: translateY(-0.5px);
 	}
 
+	.new-btn:active {
+		transform: translateY(0);
+		box-shadow: var(--shadow-sm);
+	}
+
 	.conversation-list {
 		flex: 1;
 		overflow-y: auto;
-		padding: 4px 12px;
+		padding: 2px 8px 8px;
 	}
 
 	.conversation-item {
@@ -313,12 +321,26 @@
 		align-items: center;
 		gap: 8px;
 		width: 100%;
-		padding: 10px 12px;
+		padding: 9px 10px 9px 12px;
 		border-radius: var(--radius);
 		text-align: left;
-		transition: all 0.12s ease;
+		transition: background var(--transition-fast);
 		position: relative;
-		border: 1px solid transparent;
+		cursor: pointer;
+	}
+
+	/* Left accent bar on active item */
+	.conversation-item::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 50%;
+		transform: translateY(-50%) scaleY(0);
+		width: 3px;
+		height: 60%;
+		border-radius: 0 2px 2px 0;
+		background: var(--accent);
+		transition: transform var(--transition-fast);
 	}
 
 	.conversation-item:hover {
@@ -327,21 +349,29 @@
 
 	.conversation-item.active {
 		background: var(--bg-active);
-		border-color: var(--border);
-		box-shadow: var(--shadow-sm);
+	}
+
+	.conversation-item.active::before {
+		transform: translateY(-50%) scaleY(1);
 	}
 
 	.conv-title {
 		flex: 1;
 		font-size: 0.875rem;
-		font-weight: 500;
+		font-weight: 450;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		color: var(--text);
+		color: var(--text-secondary);
+		transition: color var(--transition-fast);
 	}
 
 	.conversation-item.active .conv-title {
+		color: var(--text);
+		font-weight: 500;
+	}
+
+	.conversation-item:hover .conv-title {
 		color: var(--text);
 	}
 
@@ -350,38 +380,48 @@
 		color: var(--text-dim);
 		white-space: nowrap;
 		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.01em;
 	}
 
 	.delete-btn,
 	.rename-btn {
 		opacity: 0;
 		color: var(--text-dim);
-		padding: 4px;
+		padding: 3px;
 		border-radius: var(--radius-sm);
-		transition: all 0.12s ease;
+		transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		flex-shrink: 0;
 	}
 
 	.delete-btn:hover {
 		color: var(--error);
 		background: var(--error-bg);
+		opacity: 1;
 	}
 
 	.rename-btn:hover {
 		color: var(--accent);
 		background: var(--accent-subtle);
+		opacity: 1;
 	}
 
 	.conversation-item:hover .delete-btn,
-	.conversation-item:hover .rename-btn {
+	.conversation-item:hover .rename-btn,
+	.conversation-item.active .delete-btn,
+	.conversation-item.active .rename-btn {
+		opacity: 0.7;
+	}
+
+	.conversation-item:hover .delete-btn:hover,
+	.conversation-item:hover .rename-btn:hover {
 		opacity: 1;
 	}
 
 	.conversation-item.editing {
 		background: var(--bg-active);
-		border-color: var(--accent);
 	}
 
 	.rename-input {
@@ -404,44 +444,50 @@
 	}
 
 	.empty {
-		padding: 24px 16px;
+		padding: 32px 16px;
 		text-align: center;
 		color: var(--text-dim);
 		font-size: 0.875rem;
+		font-family: var(--font-display);
 		font-style: italic;
+		font-optical-sizing: auto;
 	}
 
 	.sidebar-footer {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 14px 20px;
+		padding: 12px 16px;
 		border-top: 1px solid var(--border);
+		gap: 8px;
 	}
 
 	.user-info {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: 9px;
 		min-width: 0;
 	}
 
 	.user-avatar {
-		width: 28px;
-		height: 28px;
+		width: 27px;
+		height: 27px;
 		border-radius: 50%;
-		background: var(--accent-subtle);
+		background: var(--accent-muted);
 		color: var(--accent);
-		font-size: 0.75rem;
-		font-weight: 600;
+		font-size: 0.6875rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
+		border: 1.5px solid var(--accent-subtle);
 	}
 
 	.user-name {
 		font-size: 0.8125rem;
+		font-weight: 500;
 		color: var(--text-secondary);
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -451,17 +497,18 @@
 	.footer-actions {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 2px;
 		flex-shrink: 0;
 	}
 
 	.logout-btn {
 		font-size: 0.75rem;
-		color: var(--text-muted);
-		padding: 5px 10px;
+		color: var(--text-dim);
+		padding: 5px 9px;
 		border-radius: var(--radius-sm);
-		transition: all 0.15s ease;
+		transition: color var(--transition-fast), background var(--transition-fast);
 		flex-shrink: 0;
+		letter-spacing: 0.01em;
 	}
 
 	.logout-btn:hover {
