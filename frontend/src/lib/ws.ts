@@ -82,6 +82,10 @@ export function createWsClient(conversationId: string, onMessage: (msg: WsMessag
 		ws?.send(JSON.stringify({ type: 'interrupt' }));
 	}
 
+	function answerQuestion(answer: string) {
+		ws?.send(JSON.stringify({ type: 'question_answer', answer }));
+	}
+
 	function disconnect() {
 		intentionalClose = true;
 		if (retryTimer) {
@@ -105,6 +109,7 @@ export function createWsClient(conversationId: string, onMessage: (msg: WsMessag
 		connect,
 		send,
 		interrupt,
+		answerQuestion,
 		disconnect,
 		setOnStatusChange,
 		setOnDisconnect,

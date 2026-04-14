@@ -171,6 +171,9 @@ class FakeSDKClient:
         for event in self._events:
             yield event
 
+    def submit_question_answer(self, answer: str) -> bool:
+        return False
+
 
 class FakeSDKClientFactory:
     """Factory that returns a pre-configured FakeSDKClient."""

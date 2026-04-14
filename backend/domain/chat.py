@@ -144,6 +144,15 @@ class ChatSession:
             except Exception:
                 pass
 
+    def submit_question_answer(self, answer: str) -> bool:
+        """Forward a user's answer to a pending askuser question.
+
+        Returns False if no question is outstanding (stray client message).
+        """
+        if self._client is None:
+            return False
+        return self._client.submit_question_answer(answer)
+
     async def cleanup(self) -> None:
         if self._sdk_session_id:
             await self._sdk_factory.remove(self._sdk_session_id)

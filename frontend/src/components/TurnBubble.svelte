@@ -10,17 +10,20 @@
 	import type { Settings } from "$lib/settings";
 	import StreamingMarkdown from "./StreamingMarkdown.svelte";
 	import ToolCall from "./ToolCall.svelte";
+	import QuestionPrompt from "./QuestionPrompt.svelte";
 
 	let {
 		message = null,
 		liveTurn = null,
 		isLive = false,
 		settings = { theme: "light", showCost: true, showDuration: true },
+		onAnswerQuestion = () => {},
 	}: {
 		message?: Message | null;
 		liveTurn?: LiveTurn | null;
 		isLive?: boolean;
 		settings?: Settings;
+		onAnswerQuestion?: (toolUseId: string, answer: string) => void;
 	} = $props();
 
 	// Elapsed timer — uses liveTurn.startedAt so it survives conversation switches
@@ -115,6 +118,8 @@
 					</details>
 				{:else if block.kind === "tool_call"}
 					<ToolCall tool={block} />
+				{:else if block.kind === "question"}
+					<QuestionPrompt question={block} onAnswer={onAnswerQuestion} />
 				{/if}
 			{/each}
 

@@ -350,6 +350,23 @@
 		wsClient?.interrupt();
 	}
 
+	function handleAnswerQuestion(toolUseId: string, answer: string) {
+		// Optimistically mark the question answered in the live turn so the
+		// UI disables the buttons immediately. The matching tool_result from
+		// the agent will arrive shortly and confirm it.
+		if (liveTurn) {
+			liveTurn = {
+				...liveTurn,
+				blocks: liveTurn.blocks.map((b) =>
+					b.kind === 'question' && b.tool_use_id === toolUseId
+						? { ...b, answered: true, selected: answer }
+						: b
+				)
+			};
+		}
+		wsClient?.answerQuestion(answer);
+	}
+
 	function handleWsMessage(msg: WsMessage) {
 		// Route events for background conversations to their bgStream
 		// The WS handler closure doesn't know which conversation it's for,
@@ -445,6 +462,7 @@
 		conversationId={activeConversationId}
 		onSend={handleSendMessage}
 		onInterrupt={handleInterrupt}
+		onAnswerQuestion={handleAnswerQuestion}
 	/>
 {:else}
 	<Login onLogin={handleLogin} />
