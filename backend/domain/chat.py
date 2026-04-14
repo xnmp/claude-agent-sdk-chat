@@ -163,6 +163,14 @@ class ChatSession:
         return client
 
     async def _auto_title(self, first_content: str) -> None:
+        """Set a placeholder title from the first user message.
+
+        This is an immediate placeholder shown in the sidebar right after the
+        first turn persists. The LLM-based title generator in the background
+        tasks layer will overwrite this with a better title shortly after —
+        it distinguishes the placeholder from a manual rename by comparing
+        against `first_content[:80]`.
+        """
         conv = await self._conversations.get(self.conversation_id)
         if conv and not conv.title:
             await self._conversations.update(
