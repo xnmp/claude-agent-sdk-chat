@@ -48,8 +48,13 @@ async def _run_background_tasks(
     conversations: object,
     user_content: str,
     assistant_text: str,
+    generate_title_this_turn: bool,
 ) -> None:
-    """Run title generation and follow-up suggestions in parallel, send results via WS."""
+    """Run title generation and follow-up suggestions in parallel, send results via WS.
+
+    `generate_title_this_turn` gates the title generator — the caller flips it
+    to False after the first turn so later turns only regenerate suggestions.
+    """
     async def do_title() -> None:
         title = await generate_title(user_content, assistant_text)
         if title:
@@ -61,7 +66,10 @@ async def _run_background_tasks(
         if questions:
             await _send_json(websocket, SuggestionsWS(type="suggestions", questions=questions))
 
-    await asyncio.gather(do_title(), do_suggestions(), return_exceptions=True)
+    if generate_title_this_turn:
+        await asyncio.gather(do_title(), do_suggestions(), return_exceptions=True)
+    else:
+        await do_suggestions()
 
 
 async def _stream_turn(
@@ -71,6 +79,7 @@ async def _stream_turn(
     conversations: object,
     content: str,
     enriched: str | None,
+    generate_title_this_turn: bool,
 ) -> None:
     """Stream a single assistant turn to the websocket.
 
@@ -107,6 +116,7 @@ async def _stream_turn(
             _run_background_tasks(
                 websocket, conversation_id, conversations, content,
                 "".join(text_chunks),
+                generate_title_this_turn=generate_title_this_turn,
             )
         )
 
@@ -130,6 +140,14 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
         await _send_json(websocket, ErrorWS(type="error", message="Conversation not found"))
         await websocket.close()
         return
+
+    # The title is generated exactly once per conversation, on the first user
+    # turn. We cache the flag here so subsequent turns in the same session
+    # skip the generator without re-reading the DB. On reconnect the flag
+    # re-derives from the DB, so it persists across sessions via the title
+    # column rather than via in-memory state.
+    existing_conv = await deps.conversations.get(conv_id)
+    needs_title = existing_conv is None or existing_conv.title is None
 
     stream_task: asyncio.Task[None] | None = None
 
@@ -155,8 +173,13 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: str) -> None
                     _stream_turn(
                         websocket, session, conv_id, deps.conversations,
                         content, enriched,
+                        generate_title_this_turn=needs_title,
                     )
                 )
+                # Optimistically flip — later turns skip the title generator
+                # regardless of whether this turn's generation actually lands
+                # a title in the DB. Failed generations retry on reconnect.
+                needs_title = False
 
             elif msg_type == "interrupt":
                 await session.handle_interrupt()
