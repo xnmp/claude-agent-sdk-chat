@@ -428,6 +428,7 @@
 		{wsStatus}
 		{settings}
 		{suggestions}
+		conversationId={activeConversationId}
 		onSend={handleSendMessage}
 		onInterrupt={handleInterrupt}
 	/>
