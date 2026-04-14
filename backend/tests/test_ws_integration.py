@@ -218,6 +218,109 @@ class TestWebSocketEndpoint:
 
         assert fake_client.interrupted is True
 
+    def test_title_generated_only_on_first_turn(self, monkeypatch):
+        """Regression: do_title() used to fire after every result event,
+        burning a small-fast-model call per turn and overwriting the title.
+        It must run exactly once per conversation — on the first user turn —
+        and skip on later turns and on reconnects where the DB already has
+        a title.
+        """
+        title_calls: list[tuple[str, str]] = []
+
+        async def fake_generate_title(user_msg: str, asst_msg: str) -> str:
+            title_calls.append((user_msg, asst_msg))
+            return f"Title {len(title_calls)}"
+
+        async def fake_generate_follow_ups(user_msg: str, asst_msg: str) -> list[str]:
+            # Returning a non-empty list means a `suggestions` frame is sent,
+            # which gives the test a deterministic "background tasks for this
+            # turn have completed" signal to wait on.
+            return ["q1"]
+
+        monkeypatch.setattr(ws, "generate_title", fake_generate_title)
+        monkeypatch.setattr(ws, "generate_follow_ups", fake_generate_follow_ups)
+
+        events = [
+            TextEvent(text="reply", message_id="m1"),
+            ResultEvent(
+                session_id="s1", duration_ms=10, total_cost_usd=0.0,
+                num_turns=1, is_error=False,
+            ),
+        ]
+        app, conv_repo, _ = _create_app(events)
+        client = TestClient(app)
+
+        loop = asyncio.get_event_loop()
+        conv = loop.run_until_complete(conv_repo.create())  # title=None
+
+        with client.websocket_connect(f"/api/ws/{conv.id}") as ws_conn:
+            # Turn 1: stream (assistant_text, result) + background (title_update, suggestions) = 4 frames
+            ws_conn.send_json({"type": "user_message", "content": "first"})
+            turn1 = [ws_conn.receive_json() for _ in range(4)]
+
+            # Turn 2: stream (assistant_text, result) + background (suggestions only) = 3 frames
+            ws_conn.send_json({"type": "user_message", "content": "second"})
+            turn2 = [ws_conn.receive_json() for _ in range(3)]
+
+        # generate_title was called exactly once across both turns
+        assert len(title_calls) == 1
+        assert title_calls[0][0] == "first"
+
+        # Turn 1 emitted exactly one title_update; turn 2 emitted none
+        turn1_types = [m["type"] for m in turn1]
+        turn2_types = [m["type"] for m in turn2]
+        assert turn1_types.count("title_update") == 1
+        assert turn2_types.count("title_update") == 0
+
+        # DB still holds the first-turn title (no overwrite from turn 2)
+        conv_after = loop.run_until_complete(conv_repo.get(conv.id))
+        assert conv_after is not None
+        assert conv_after.title == "Title 1"
+
+    def test_title_generation_skipped_on_reconnect_when_already_titled(self, monkeypatch):
+        """Regression: a fresh WS to a conversation that already has a title
+        in the DB must NOT regenerate it on the first turn of the new session.
+        The needs_title flag derives from the DB at WS connect time.
+        """
+        title_calls: list[tuple[str, str]] = []
+
+        async def fake_generate_title(user_msg: str, asst_msg: str) -> str:
+            title_calls.append((user_msg, asst_msg))
+            return "Should Not Run"
+
+        async def fake_generate_follow_ups(user_msg: str, asst_msg: str) -> list[str]:
+            return ["q1"]
+
+        monkeypatch.setattr(ws, "generate_title", fake_generate_title)
+        monkeypatch.setattr(ws, "generate_follow_ups", fake_generate_follow_ups)
+
+        events = [
+            TextEvent(text="reply", message_id="m1"),
+            ResultEvent(
+                session_id="s1", duration_ms=10, total_cost_usd=0.0,
+                num_turns=1, is_error=False,
+            ),
+        ]
+        app, conv_repo, _ = _create_app(events)
+        client = TestClient(app)
+
+        loop = asyncio.get_event_loop()
+        # Pre-existing title — simulates a reconnect after the title was
+        # already generated in a previous session.
+        conv = loop.run_until_complete(conv_repo.create(title="Existing Title"))
+
+        with client.websocket_connect(f"/api/ws/{conv.id}") as ws_conn:
+            ws_conn.send_json({"type": "user_message", "content": "hi"})
+            # stream (assistant_text, result) + background (suggestions) = 3 frames
+            frames = [ws_conn.receive_json() for _ in range(3)]
+
+        assert len(title_calls) == 0
+        assert "title_update" not in [m["type"] for m in frames]
+
+        conv_after = loop.run_until_complete(conv_repo.get(conv.id))
+        assert conv_after is not None
+        assert conv_after.title == "Existing Title"
+
     def test_empty_message_is_ignored(self):
         events = [
             TextEvent(text="hi", message_id="m1"),
