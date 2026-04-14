@@ -19,21 +19,28 @@ RUN npm run build
 
 
 # ---------- Stage 2: runtime ----------
-# Node base so Claude CLI (npm @anthropic-ai/claude-code) runs without
-# a separate JS runtime install. Python is layered on top via apt.
-FROM node:22-slim AS runtime
+# Python base so the FastAPI process uses the system interpreter directly
+# (no uv-managed python hack, no cross-user permission workarounds). The
+# system Python lives in a world-readable location and the `app` user can
+# execute it without any chmod/chown games.
+#
+# Node is layered on top because the Claude CLI is distributed as an npm
+# package (@anthropic-ai/claude-code) that shells out to a Node runtime.
+FROM python:3.12-slim-trixie AS runtime
 
 # System deps:
-#   - python3 / python3-venv : FastAPI runtime
-#   - bubblewrap             : required by Claude CLI's Bash sandbox
+#   - nodejs                 : required at runtime by Claude CLI (trixie
+#                              ships Node 22, matching what the CLI expects)
+#   - npm                    : used at build-time only, for the CLI install
+#   - bubblewrap             : Claude CLI's Bash sandbox calls bwrap
 #   - curl, ca-certificates  : uv installer + healthcheck
 #   - git                    : agents frequently shell out to it
 #   - tini                   : proper signal handling for the python process
 #     (so SIGTERM from `docker stop` actually reaches uvicorn)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        python3 \
-        python3-venv \
+        nodejs \
+        npm \
         bubblewrap \
         curl \
         ca-certificates \
@@ -47,19 +54,16 @@ RUN apt-get update \
 # unprivileged-userns mode, which works inside a container as long as
 # the runtime allows `pivot_root` and `mount proc` (see docker-compose).
 
-# Install uv (pinned standalone installer). Avoids pulling pip.
-# UV_PYTHON_INSTALL_DIR puts the managed interpreter in a world-readable
-# location so the non-root `app` user can traverse and execute it. The
-# default (~/.local/share/uv) sits under root's home and is unreadable
-# by other users, which breaks `uvicorn` at exec time.
-ENV UV_INSTALL_DIR=/usr/local/bin \
-    UV_PYTHON_INSTALL_DIR=/opt/uv-python
+# Install uv (standalone binary, no pip). System Python (/usr/local/bin/python)
+# is used directly — no UV_PYTHON_INSTALL_DIR needed because the base image
+# already puts the interpreter at a world-readable path.
+ENV UV_INSTALL_DIR=/usr/local/bin
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && uv --version
 
-# Install Claude CLI globally. The claude-agent-sdk spawns `claude` via
-# shutil.which, and the CLI in turn invokes bwrap for its sandbox.
-RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code \
+# Install Claude CLI globally. Pinned to match the host install so behavior
+# is reproducible; bump deliberately when upgrading.
+RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code@2.1.108 \
     && claude --version
 
 # Non-root user for the running app. Keeping root for the install steps
@@ -80,10 +84,10 @@ WORKDIR /app
 COPY --chown=app:app pyproject.toml uv.lock ./
 
 # Install Python deps into a venv at /app/.venv using the frozen lockfile.
-# --no-dev excludes test/dev extras.
-RUN uv sync --frozen --no-dev \
-    && chmod -R a+rX /opt/uv-python \
-    && chown -R app:app /app/.venv
+# --no-dev excludes test/dev extras. uv finds the system Python at
+# /usr/local/bin/python which is already world-executable, so no
+# cross-user permission fixups needed.
+RUN uv sync --frozen --no-dev
 
 # Copy backend source, MCP server source, and schema.
 COPY --chown=app:app backend/ ./backend/
