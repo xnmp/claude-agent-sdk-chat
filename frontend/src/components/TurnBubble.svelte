@@ -1,14 +1,21 @@
 <script lang="ts">
-	import type { Block, Message, UserContent, AssistantContent, LiveTurn, ToolCallBlock } from '$lib/types';
-	import type { Settings } from '$lib/settings';
-	import StreamingMarkdown from './StreamingMarkdown.svelte';
-	import ToolCall from './ToolCall.svelte';
+	import type {
+		Block,
+		Message,
+		UserContent,
+		AssistantContent,
+		LiveTurn,
+		ToolCallBlock,
+	} from "$lib/types";
+	import type { Settings } from "$lib/settings";
+	import StreamingMarkdown from "./StreamingMarkdown.svelte";
+	import ToolCall from "./ToolCall.svelte";
 
 	let {
 		message = null,
 		liveTurn = null,
 		isLive = false,
-		settings = { theme: 'light', showCost: true, showDuration: true }
+		settings = { theme: "light", showCost: true, showDuration: true },
 	}: {
 		message?: Message | null;
 		liveTurn?: LiveTurn | null;
@@ -29,20 +36,25 @@
 		return () => clearInterval(timer);
 	});
 
-	let isUser = $derived(message?.role === 'user');
-	let userContent = $derived(isUser ? (message?.content as UserContent) : null);
-	let assistantContent = $derived(!isUser && message ? (message.content as AssistantContent) : null);
+	let isUser = $derived(message?.role === "user");
+	let userContent = $derived(
+		isUser ? (message?.content as UserContent) : null,
+	);
+	let assistantContent = $derived(
+		!isUser && message ? (message.content as AssistantContent) : null,
+	);
 
 	// Created-file relative paths are stored as "<session_id>/<name>" so the
 	// /api/output static mount resolves them correctly. Strip a leading
 	// UUID-shaped segment for display so users see the plain filename, while
 	// the href and download attributes keep the full path.
-	const SESSION_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i;
-	const displayFileLabel = (path: string) => path.replace(SESSION_PREFIX, '');
+	const SESSION_PREFIX =
+		/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i;
+	const displayFileLabel = (path: string) => path.replace(SESSION_PREFIX, "");
 
 	// Source of truth for the block list, regardless of live vs persisted.
 	let blocks = $derived<Block[]>(
-		isLive && liveTurn ? liveTurn.blocks : (assistantContent?.blocks ?? [])
+		isLive && liveTurn ? liveTurn.blocks : (assistantContent?.blocks ?? []),
 	);
 
 	// Show a streaming dot indicator only when streaming and the model hasn't
@@ -51,7 +63,7 @@
 	let lastToolCall = $derived.by((): ToolCallBlock | null => {
 		for (let i = blocks.length - 1; i >= 0; i--) {
 			const b = blocks[i];
-			if (b.kind === 'tool_call') return b;
+			if (b.kind === "tool_call") return b;
 		}
 		return null;
 	});
@@ -67,23 +79,41 @@
 	<div class="turn assistant-turn">
 		<div class="bubble assistant-bubble">
 			{#each blocks as block, idx (idx)}
-				{#if block.kind === 'text'}
+				{#if block.kind === "text"}
 					<div class="response-text markdown">
-						<StreamingMarkdown text={block.text} revealed={block.revealed} />
+						<StreamingMarkdown
+							text={block.text}
+							revealed={block.revealed}
+						/>
 					</div>
-				{:else if block.kind === 'thinking'}
+				{:else if block.kind === "thinking"}
 					<details class="thinking-block">
 						<summary>
-							<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 14 14"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+							>
 								<circle cx="7" cy="7" r="5.5" />
-								<path d="M5.5 5.5C5.5 4.67 6.17 4 7 4C7.83 4 8.5 4.67 8.5 5.5C8.5 6.33 7.83 7 7 7V8" />
-								<circle cx="7" cy="9.5" r="0.5" fill="currentColor" />
+								<path
+									d="M5.5 5.5C5.5 4.67 6.17 4 7 4C7.83 4 8.5 4.67 8.5 5.5C8.5 6.33 7.83 7 7 7V8"
+								/>
+								<circle
+									cx="7"
+									cy="9.5"
+									r="0.5"
+									fill="currentColor"
+								/>
 							</svg>
 							Thinking
 						</summary>
 						<pre>{block.thinking}</pre>
 					</details>
-				{:else if block.kind === 'tool_call'}
+				{:else if block.kind === "tool_call"}
 					<ToolCall tool={block} />
 				{/if}
 			{/each}
@@ -100,9 +130,9 @@
 					<span class="dot"></span>
 					<span class="dot"></span>
 					<span class="streaming-status">
-						{(typeof lastToolCall.input?.description === 'string'
+						{typeof lastToolCall.input?.description === "string"
 							? lastToolCall.input.description
-							: lastToolCall.name)}...
+							: lastToolCall.name}...
 					</span>
 				</div>
 			{/if}
@@ -114,13 +144,19 @@
 			{:else if assistantContent && ((settings.showCost && assistantContent.total_cost_usd > 0) || (settings.showDuration && assistantContent.duration_ms > 0))}
 				<div class="meta">
 					{#if settings.showCost && assistantContent.total_cost_usd > 0}
-						<span>${assistantContent.total_cost_usd.toFixed(4)}</span>
+						<span
+							>${assistantContent.total_cost_usd.toFixed(4)}</span
+						>
 					{/if}
 					{#if settings.showCost && settings.showDuration && assistantContent.total_cost_usd > 0 && assistantContent.duration_ms > 0}
 						<span class="meta-sep">&middot;</span>
 					{/if}
 					{#if settings.showDuration && assistantContent.duration_ms > 0}
-						<span>{(assistantContent.duration_ms / 1000).toFixed(1)}s</span>
+						<span
+							>{(assistantContent.duration_ms / 1000).toFixed(
+								1,
+							)}s</span
+						>
 					{/if}
 				</div>
 			{/if}
@@ -132,10 +168,19 @@
 						<a
 							class="file-link"
 							href="http://localhost:8000/api/output/{file}"
-							download={file.split('/').pop()}
+							download={file.split("/").pop()}
 							target="_blank"
 						>
-							<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<svg
+								width="12"
+								height="12"
+								viewBox="0 0 12 12"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
 								<path d="M6 2v6M3 6l3 3 3-3M2 10h8" />
 							</svg>
 							{displayFileLabel(file)}
@@ -153,8 +198,8 @@
 	}
 
 	.bubble {
-		max-width: 86%;
-		padding: 13px 17px;
+		max-width: 92%;
+		padding: 14px 18px;
 		border-radius: var(--radius-lg);
 		line-height: 1.62;
 		font-size: 0.9375rem;
@@ -166,7 +211,9 @@
 		color: white;
 		margin-left: auto;
 		border-bottom-right-radius: 3px;
-		box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.06);
+		box-shadow:
+			0 1px 3px rgba(0, 0, 0, 0.12),
+			0 1px 1px rgba(0, 0, 0, 0.06);
 	}
 
 	.user-bubble p {
@@ -205,9 +252,15 @@
 		letter-spacing: -0.01em;
 	}
 
-	.response-text.markdown :global(h1) { font-size: 1.3em; }
-	.response-text.markdown :global(h2) { font-size: 1.15em; }
-	.response-text.markdown :global(h3) { font-size: 1.05em; }
+	.response-text.markdown :global(h1) {
+		font-size: 1.3em;
+	}
+	.response-text.markdown :global(h2) {
+		font-size: 1.15em;
+	}
+	.response-text.markdown :global(h3) {
+		font-size: 1.05em;
+	}
 
 	.response-text.markdown :global(ul),
 	.response-text.markdown :global(ol) {
@@ -325,8 +378,12 @@
 		color: var(--text-secondary);
 	}
 
-	.thinking-block summary::-webkit-details-marker { display: none; }
-	.thinking-block summary::marker { content: ''; }
+	.thinking-block summary::-webkit-details-marker {
+		display: none;
+	}
+	.thinking-block summary::marker {
+		content: "";
+	}
 
 	.thinking-block pre {
 		padding: 0 12px 12px;
@@ -388,7 +445,9 @@
 		font-family: var(--font-mono);
 		font-size: 0.6875rem;
 		text-decoration: none;
-		transition: background var(--transition-fast), border-color var(--transition-fast);
+		transition:
+			background var(--transition-fast),
+			border-color var(--transition-fast);
 	}
 
 	.file-link:hover {
