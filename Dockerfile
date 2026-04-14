@@ -64,8 +64,14 @@ RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code \
 
 # Non-root user for the running app. Keeping root for the install steps
 # above avoids permission contortions with apt/npm.
+#
+# HOME is a real directory (/home/app) rather than /app (the code dir).
+# The Claude CLI writes config, cache, and telemetry files under $HOME/.claude
+# at startup — if $HOME isn't writable, the CLI hangs trying to set itself up.
 RUN groupadd --system --gid 1001 app \
-    && useradd  --system --uid 1001 --gid app --home-dir /app --shell /bin/bash app
+    && useradd  --system --uid 1001 --gid app --home-dir /home/app --shell /bin/bash --create-home app \
+    && mkdir -p /home/app/.claude \
+    && chown -R app:app /home/app
 
 WORKDIR /app
 
