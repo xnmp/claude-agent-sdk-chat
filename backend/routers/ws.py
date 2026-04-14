@@ -56,6 +56,21 @@ async def _run_background_tasks(
     to False after the first turn so later turns only regenerate suggestions.
     """
     async def do_title() -> None:
+        # Two titles can already be on the conversation at this point:
+        #   1. The placeholder set by ChatSession._auto_title (always equals
+        #      `user_content[:80]`). This is overwritable — we're the final
+        #      LLM-based title and the placeholder only exists so the sidebar
+        #      shows *something* between stream-end and our completion.
+        #   2. A title the user set manually via PATCH /api/conversations/{id}
+        #      — either before WS connect (caught by needs_title=False) or
+        #      between WS connect and this background task firing (the race
+        #      the needs_title flag can't catch). Manual titles are anything
+        #      that doesn't match the placeholder shape.
+        current = await conversations.get(conversation_id)  # type: ignore[union-attr]
+        if current is not None and current.title is not None:
+            auto_placeholder = user_content[:80]
+            if current.title != auto_placeholder:
+                return  # Manual rename — leave it alone.
         title = await generate_title(user_content, assistant_text)
         if title:
             await conversations.update(conversation_id, title=title)  # type: ignore[union-attr]

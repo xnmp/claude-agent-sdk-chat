@@ -321,6 +321,57 @@ class TestWebSocketEndpoint:
         assert conv_after is not None
         assert conv_after.title == "Existing Title"
 
+    def test_manual_rename_during_first_turn_is_not_overwritten(self, monkeypatch):
+        """Race protection: the user can manually rename the conversation
+        between WS connect (where needs_title=True is cached) and the first
+        turn firing. do_title() must re-check the DB and skip if the title
+        has been set in the interim.
+        """
+        title_calls: list[tuple[str, str]] = []
+
+        async def fake_generate_title(user_msg: str, asst_msg: str) -> str:
+            title_calls.append((user_msg, asst_msg))
+            return "Auto Title"
+
+        async def fake_generate_follow_ups(user_msg: str, asst_msg: str) -> list[str]:
+            return ["q1"]
+
+        monkeypatch.setattr(ws, "generate_title", fake_generate_title)
+        monkeypatch.setattr(ws, "generate_follow_ups", fake_generate_follow_ups)
+
+        events = [
+            TextEvent(text="reply", message_id="m1"),
+            ResultEvent(
+                session_id="s1", duration_ms=10, total_cost_usd=0.0,
+                num_turns=1, is_error=False,
+            ),
+        ]
+        app, conv_repo, _ = _create_app(events)
+        client = TestClient(app)
+
+        loop = asyncio.get_event_loop()
+        # Conversation starts untitled — needs_title will be True at WS connect.
+        conv = loop.run_until_complete(conv_repo.create())
+
+        with client.websocket_connect(f"/api/ws/{conv.id}") as ws_conn:
+            # Simulate the user manually renaming via the REST API AFTER the
+            # WS connect cached needs_title=True but BEFORE the first turn fires.
+            loop.run_until_complete(conv_repo.update(conv.id, title="My Title"))
+
+            ws_conn.send_json({"type": "user_message", "content": "hi"})
+            # stream (assistant_text, result) + background (suggestions only,
+            # because do_title() should bail at the DB recheck) = 3 frames
+            frames = [ws_conn.receive_json() for _ in range(3)]
+
+        # do_title's DB recheck saw "My Title" and skipped before calling
+        # generate_title — no LLM call, no title_update frame, no overwrite.
+        assert len(title_calls) == 0
+        assert "title_update" not in [m["type"] for m in frames]
+
+        conv_after = loop.run_until_complete(conv_repo.get(conv.id))
+        assert conv_after is not None
+        assert conv_after.title == "My Title"
+
     def test_empty_message_is_ignored(self):
         events = [
             TextEvent(text="hi", message_id="m1"),

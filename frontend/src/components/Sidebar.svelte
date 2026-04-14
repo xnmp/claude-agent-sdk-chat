@@ -9,6 +9,7 @@
 		onSelect,
 		onNew,
 		onDelete,
+		onRename,
 		user,
 		onLogout,
 		settings,
@@ -19,6 +20,7 @@
 		onSelect: (id: string) => void;
 		onNew: () => void;
 		onDelete: (id: string) => void;
+		onRename: (id: string, title: string) => void;
 		user: User;
 		onLogout: () => void;
 		settings: Settings;
@@ -28,6 +30,42 @@
 	let sidebarWidth = $state(280);
 	let collapsed = $state(false);
 	let isResizing = $state(false);
+
+	// Inline rename — exactly one conversation can be in edit mode at a time.
+	let editingId = $state<string | null>(null);
+	let editingDraft = $state('');
+
+	function startRename(id: string, currentTitle: string | null) {
+		editingId = id;
+		editingDraft = currentTitle ?? '';
+	}
+
+	function commitRename() {
+		if (editingId === null) return;
+		const trimmed = editingDraft.trim();
+		const original = conversations.find((c) => c.id === editingId)?.title ?? '';
+		// Empty input or unchanged → cancel without API call
+		if (trimmed && trimmed !== original) {
+			onRename(editingId, trimmed);
+		}
+		editingId = null;
+		editingDraft = '';
+	}
+
+	function cancelRename() {
+		editingId = null;
+		editingDraft = '';
+	}
+
+	function handleRenameKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			commitRename();
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			cancelRename();
+		}
+	}
 
 	function startResize(e: MouseEvent) {
 		e.preventDefault();
@@ -80,26 +118,53 @@
 			<div
 				class="conversation-item"
 				class:active={conv.id === activeConversationId}
+				class:editing={conv.id === editingId}
 				role="button"
 				tabindex="0"
-				onclick={() => onSelect(conv.id)}
-				onkeydown={(e) => e.key === 'Enter' && onSelect(conv.id)}
+				onclick={() => editingId !== conv.id && onSelect(conv.id)}
+				onkeydown={(e) => editingId !== conv.id && e.key === 'Enter' && onSelect(conv.id)}
 			>
-				<span class="conv-title">{conv.title || 'New conversation'}</span>
-				<span class="conv-time">{formatDate(conv.updated_at)}</span>
-				<button
-					class="delete-btn"
-					onclick={(e) => {
-						e.stopPropagation();
-						onDelete(conv.id);
-					}}
-					aria-label="Delete conversation"
-				>
-					<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-						<line x1="2" y1="2" x2="10" y2="10" />
-						<line x1="10" y1="2" x2="2" y2="10" />
-					</svg>
-				</button>
+				{#if editingId === conv.id}
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						class="rename-input"
+						type="text"
+						bind:value={editingDraft}
+						onkeydown={handleRenameKeydown}
+						onblur={commitRename}
+						onclick={(e) => e.stopPropagation()}
+						autofocus
+						aria-label="Rename conversation"
+					/>
+				{:else}
+					<span class="conv-title">{conv.title || 'New conversation'}</span>
+					<span class="conv-time">{formatDate(conv.updated_at)}</span>
+					<button
+						class="rename-btn"
+						onclick={(e) => {
+							e.stopPropagation();
+							startRename(conv.id, conv.title);
+						}}
+						aria-label="Rename conversation"
+					>
+						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M8.5 1.5L10.5 3.5L4 10H2V8L8.5 1.5Z" />
+						</svg>
+					</button>
+					<button
+						class="delete-btn"
+						onclick={(e) => {
+							e.stopPropagation();
+							onDelete(conv.id);
+						}}
+						aria-label="Delete conversation"
+					>
+						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+							<line x1="2" y1="2" x2="10" y2="10" />
+							<line x1="10" y1="2" x2="2" y2="10" />
+						</svg>
+					</button>
+				{/if}
 			</div>
 		{/each}
 		{#if conversations.length === 0}
@@ -287,7 +352,8 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.delete-btn {
+	.delete-btn,
+	.rename-btn {
 		opacity: 0;
 		color: var(--text-dim);
 		padding: 4px;
@@ -303,8 +369,38 @@
 		background: var(--error-bg);
 	}
 
-	.conversation-item:hover .delete-btn {
+	.rename-btn:hover {
+		color: var(--accent);
+		background: var(--accent-subtle);
+	}
+
+	.conversation-item:hover .delete-btn,
+	.conversation-item:hover .rename-btn {
 		opacity: 1;
+	}
+
+	.conversation-item.editing {
+		background: var(--bg-active);
+		border-color: var(--accent);
+	}
+
+	.rename-input {
+		flex: 1;
+		min-width: 0;
+		font: inherit;
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+		background: var(--bg-surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		padding: 4px 8px;
+		outline: none;
+	}
+
+	.rename-input:focus {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 2px var(--accent-subtle);
 	}
 
 	.empty {

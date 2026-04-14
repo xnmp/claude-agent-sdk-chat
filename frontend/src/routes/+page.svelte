@@ -4,7 +4,7 @@
 	import ChatView from '../components/ChatView.svelte';
 	import Login from '../components/Login.svelte';
 	import type { Block, Conversation, Message, LiveTurn, WsMessage, AssistantContent, User } from '$lib/types';
-	import { listConversations, createConversation, getMessages, deleteConversation, login, uploadFile } from '$lib/api';
+	import { listConversations, createConversation, getMessages, deleteConversation, login, uploadFile, updateConversationTitle } from '$lib/api';
 	import { createWsClient, type WsClient, type WsStatus } from '$lib/ws';
 	import { processWsMessage } from '$lib/liveTurnReducer';
 	import { loadSettings, saveSettings, applyTheme, type Settings } from '$lib/settings';
@@ -231,6 +231,19 @@
 		}
 	}
 
+	async function handleRenameConversation(id: string, title: string) {
+		// Optimistic local update — the PATCH below is the source of truth.
+		conversations = conversations.map((c) =>
+			c.id === id ? { ...c, title } : c
+		);
+		try {
+			await updateConversationTitle(id, title);
+		} catch {
+			// On failure, refresh from server to surface the actual title.
+			loadConversations();
+		}
+	}
+
 	async function handleSendMessage(content: string, files: File[] = []) {
 		if (!wsClient || isStreaming || !activeConversationId) return;
 
@@ -414,6 +427,7 @@
 		onSelect={selectConversation}
 		onNew={handleNewChat}
 		onDelete={handleDeleteConversation}
+		onRename={handleRenameConversation}
 		user={currentUser}
 		onLogout={handleLogout}
 		{settings}
