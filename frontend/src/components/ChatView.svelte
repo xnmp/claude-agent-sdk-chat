@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { tick } from 'svelte';
 	import type { Message, LiveTurn } from '$lib/types';
 	import type { WsStatus } from '$lib/ws';
 	import type { Settings } from '$lib/settings';
@@ -13,6 +12,7 @@
 		wsStatus,
 		settings,
 		suggestions = [],
+		conversationId = null,
 		onSend,
 		onInterrupt
 	}: {
@@ -22,30 +22,75 @@
 		wsStatus: WsStatus;
 		settings: Settings;
 		suggestions?: string[];
+		conversationId?: string | null;
 		onSend: (content: string, files: File[]) => void;
 		onInterrupt: () => void;
 	} = $props();
 
 	let scrollContainer: HTMLDivElement | undefined = $state();
+	let messagesInner: HTMLDivElement | undefined = $state();
 	let messageInput: MessageInput | undefined = $state();
+
+	// Auto-follow stickiness: while sticky, ResizeObserver scrolls to the
+	// bottom on every height change. Wheel-up disengages immediately so the
+	// user can read a long essay while the rest of it streams; scrolling
+	// back to within REENGAGE_PX of the bottom re-engages.
+	//
+	// We deliberately separate user intent (wheel) from position checking
+	// (scroll). Position-only detection is racy: the programmatic scroll in
+	// the ResizeObserver fires a scroll event AFTER content may have grown
+	// further, making `distance > 0` look like a user scroll-away. Watching
+	// wheel events captures intent directly and avoids the race.
+	let stickToBottom = $state(true);
+	const REENGAGE_PX = 10;
 
 	export function focusInput() {
 		messageInput?.focus();
 	}
 
-	// Auto-scroll is a genuine DOM side effect — $effect is appropriate here
-	$effect(() => {
-		void messages.length;
-		void liveTurn?.blocks.length;
+	function handleScroll() {
+		// Only used to RE-engage when the user scrolls back to the bottom.
+		// Disengage is wheel-driven so we can't be tricked by a programmatic
+		// scroll firing this handler with a stale distance.
+		if (!scrollContainer || stickToBottom) return;
+		const distance =
+			scrollContainer.scrollHeight - scrollContainer.clientHeight - scrollContainer.scrollTop;
+		if (distance < REENGAGE_PX) stickToBottom = true;
+	}
 
-		tick().then(() => {
-			if (scrollContainer) {
-				scrollContainer.scrollTo({
-					top: scrollContainer.scrollHeight,
-					behavior: 'smooth'
-				});
+	function handleWheel(e: WheelEvent) {
+		// Any upward wheel = user wants to read above. Disengage immediately.
+		// Downward wheel is harmless: scroll handler will re-engage when they
+		// reach the bottom.
+		if (e.deltaY < 0) stickToBottom = false;
+	}
+
+	// Conversation switch: always start at the bottom of the freshly-loaded history,
+	// regardless of where stickiness was left in the previous conversation.
+	$effect(() => {
+		void conversationId;
+		stickToBottom = true;
+	});
+
+	// Auto-follow via ResizeObserver — fires on every height change of the
+	// inner content (text deltas, tool inputs/results, typewriter wraps, new
+	// blocks) OR the container itself (suggestions appearing after a turn
+	// finishes shrinks .messages, viewport resizes). Both can move the
+	// bottom; observing just one of them leaves the other class of change
+	// unhandled. Direct `scrollTop = scrollHeight` snaps cleanly — using
+	// `behavior: 'smooth'` here would race with subsequent fires and land
+	// on stale targets.
+	$effect(() => {
+		if (!messagesInner || !scrollContainer) return;
+		const container = scrollContainer;
+		const ro = new ResizeObserver(() => {
+			if (stickToBottom) {
+				container.scrollTop = container.scrollHeight;
 			}
 		});
+		ro.observe(messagesInner);
+		ro.observe(container);
+		return () => ro.disconnect();
 	});
 
 	let noConversation = $derived(wsStatus === 'disconnected' && messages.length === 0);
@@ -66,8 +111,8 @@
 			<p>Create or select a conversation from the sidebar.</p>
 		</div>
 	{:else}
-		<div class="messages" bind:this={scrollContainer}>
-			<div class="messages-inner">
+		<div class="messages" bind:this={scrollContainer} onscroll={handleScroll} onwheel={handleWheel}>
+			<div class="messages-inner" bind:this={messagesInner}>
 				{#each messages as msg (msg.id)}
 					<TurnBubble message={msg} {settings} />
 				{/each}
