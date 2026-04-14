@@ -222,8 +222,8 @@
 		gap: 5px;
 		padding: 7px 14px;
 		border-radius: var(--radius);
-		background: var(--text);
-		color: var(--bg-surface);
+		background: var(--accent);
+		color: white;
 		font-size: 0.8125rem;
 		font-weight: 600;
 		letter-spacing: 0.01em;
@@ -232,7 +232,7 @@
 	}
 
 	.new-btn:hover {
-		background: var(--text-secondary);
+		background: var(--accent-hover);
 		box-shadow: var(--shadow-md);
 		transform: translateY(-0.5px);
 	}

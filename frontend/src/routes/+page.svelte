@@ -8,6 +8,7 @@
 	import { createWsClient, type WsClient, type WsStatus } from '$lib/ws';
 	import { processWsMessage } from '$lib/liveTurnReducer';
 	import { loadSettings, saveSettings, applyTheme, type Settings } from '$lib/settings';
+	import { createTypewriter } from '$lib/typewriter';
 
 	let currentUser = $state<User | null>(null);
 	let settings = $state<Settings>(loadSettings());
@@ -28,42 +29,17 @@
 	// -- Typewriter ticker --------------------------------------------------
 	//
 	// Every text block (live or just-finalized) carries a `revealed` cursor
-	// separately from its `text`. SDK deltas grow `text`. This ticker — the
-	// ONLY writer of `revealed` — advances each cursor toward text.length at
-	// a steady base pace, with a backlog-proportional boost so long responses
-	// don't fall arbitrarily far behind. Rendering reads `text.slice(0, revealed)`.
+	// separately from its `text`. SDK deltas grow `text`; the typewriter
+	// (defined in $lib/typewriter) is the ONLY writer of `revealed`.
 	//
-	// Because the cursor lives on the block itself, finalize doesn't need any
-	// special handling: the persisted message's blocks are the same references
-	// we've been advancing, and the ticker keeps going until they're drained.
+	// Because the cursor lives on the block itself, finalize doesn't need
+	// any special handling: the persisted message's blocks are the same
+	// references we've been advancing, and the ticker keeps going until
+	// they're drained.
 
+	const typewriter = createTypewriter();
 	let typewriterFrameId: number | null = null;
 	let typewriterLastTime = 0;
-
-	function advanceBlocks(blocks: Block[], dt: number): boolean {
-		let anyProgress = false;
-		for (const block of blocks) {
-			if (block.kind !== 'text') continue;
-			const remaining = block.text.length - block.revealed;
-			if (remaining <= 0) continue;
-
-			// Base pace: ~60 chars/sec (one char per frame at 60fps).
-			const baseChars = 0.06 * dt;
-			// Backlog boost: when further than 40 chars behind, accelerate in
-			// proportion to the backlog. 0.003 * dt means a 500-char backlog
-			// adds ~1.4 chars/ms (≈1400 chars/sec) before the per-frame cap.
-			const backlogChars = Math.max(0, remaining - 40) * 0.003 * dt;
-			// Cap per frame so even enormous backlogs still look progressive
-			// rather than dumping all at once. 6 chars/frame * 60fps = 360 chars/sec.
-			const advance = Math.min(
-				6,
-				Math.max(1, Math.ceil(baseChars + backlogChars))
-			);
-			block.revealed = Math.min(block.text.length, block.revealed + advance);
-			anyProgress = true;
-		}
-		return anyProgress;
-	}
 
 	function typewriterTick(now: number) {
 		const dt = Math.min(100, Math.max(0, now - typewriterLastTime));
@@ -72,7 +48,7 @@
 		let anyProgress = false;
 
 		if (liveTurn) {
-			if (advanceBlocks(liveTurn.blocks, dt)) anyProgress = true;
+			if (typewriter.advanceBlocks(liveTurn.blocks, dt)) anyProgress = true;
 		}
 		// Also drain any freshly-finalized messages whose cursors still have
 		// work to do. Once `revealed === text.length` for all blocks they
@@ -80,7 +56,8 @@
 		for (const msg of messages) {
 			if (msg.role !== 'assistant') continue;
 			const content = msg.content as AssistantContent;
-			if (advanceBlocks(content.blocks as Block[], dt)) anyProgress = true;
+			if (typewriter.advanceBlocks(content.blocks as Block[], dt))
+				anyProgress = true;
 		}
 
 		if (anyProgress) {
