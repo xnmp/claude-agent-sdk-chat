@@ -33,6 +33,13 @@
 	let userContent = $derived(isUser ? (message?.content as UserContent) : null);
 	let assistantContent = $derived(!isUser && message ? (message.content as AssistantContent) : null);
 
+	// Created-file relative paths are stored as "<session_id>/<name>" so the
+	// /api/output static mount resolves them correctly. Strip a leading
+	// UUID-shaped segment for display so users see the plain filename, while
+	// the href and download attributes keep the full path.
+	const SESSION_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i;
+	const displayFileLabel = (path: string) => path.replace(SESSION_PREFIX, '');
+
 	// Source of truth for the block list, regardless of live vs persisted.
 	let blocks = $derived<Block[]>(
 		isLive && liveTurn ? liveTurn.blocks : (assistantContent?.blocks ?? [])
@@ -131,7 +138,7 @@
 							<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 								<path d="M6 2v6M3 6l3 3 3-3M2 10h8" />
 							</svg>
-							{file}
+							{displayFileLabel(file)}
 						</a>
 					{/each}
 				</div>
