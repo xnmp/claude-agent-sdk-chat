@@ -189,6 +189,42 @@ describe('TurnBubble', () => {
 		expect(links[0]).toHaveAttribute('href', expect.stringContaining('report.csv'));
 	});
 
+	it('strips session_id prefix from the link label but keeps it in the href', () => {
+		// Post per-session-output-folders, created_files come in as
+		// "<session_id>/<name>" so the /api/output static mount resolves them.
+		// The displayed label should be just the filename.
+		const sessionId = 'b236f25b-d2c4-47a1-b617-08be5d5074a6';
+		render(TurnBubble, {
+			props: {
+				message: assistantMessage({
+					created_files: [`${sessionId}/hello.md`]
+				})
+			}
+		});
+		const link = screen.getByRole('link');
+		expect(link).toHaveTextContent('hello.md');
+		expect(link).not.toHaveTextContent(sessionId);
+		expect(link).toHaveAttribute(
+			'href',
+			expect.stringContaining(`${sessionId}/hello.md`)
+		);
+		expect(link).toHaveAttribute('download', 'hello.md');
+	});
+
+	it('preserves non-UUID first segments in the link label', () => {
+		// Legitimate nested output (e.g. from older turns before the session
+		// scoping) should not be mangled by the UUID-prefix stripper.
+		render(TurnBubble, {
+			props: {
+				message: assistantMessage({
+					created_files: ['analysis/results.csv']
+				})
+			}
+		});
+		const link = screen.getByRole('link');
+		expect(link).toHaveTextContent('analysis/results.csv');
+	});
+
 	it('does not render download section when no created files', () => {
 		const { container } = render(TurnBubble, {
 			props: { message: assistantMessage({ created_files: [] }) }
