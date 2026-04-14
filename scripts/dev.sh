@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 pkill -f 'uvicorn backend' 2>/dev/null || true
 pkill -f 'vite.*5173' 2>/dev/null || true
 # Free port 8000 if still held
-fuser -k 8000/tcp 2>/dev/null || true
+lsof -ti:8000 | xargs kill -9 2>/dev/null || true
 
 # Force remove the container if it exists (running or not)
 docker rm -f claude-chat-postgres 2>/dev/null || true
