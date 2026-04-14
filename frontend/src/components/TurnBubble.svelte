@@ -11,6 +11,13 @@
 	import StreamingMarkdown from "./StreamingMarkdown.svelte";
 	import ToolCall from "./ToolCall.svelte";
 	import QuestionPrompt from "./QuestionPrompt.svelte";
+	import TodoList from "./TodoList.svelte";
+
+	interface TodoItem {
+		content: string;
+		status: "pending" | "in_progress" | "completed";
+		activeForm: string;
+	}
 
 	let {
 		message = null,
@@ -60,13 +67,43 @@
 		isLive && liveTurn ? liveTurn.blocks : (assistantContent?.blocks ?? []),
 	);
 
+	// During live turns TodoWrite blocks are rendered by ChatView's standalone
+	// panel instead of inline, so treat them as invisible when deciding whether
+	// the bubble is "empty" or what tool is currently running.
+	let visibleBlockCount = $derived(
+		blocks.filter(
+			(b) => !(isLive && b.kind === "tool_call" && b.name === "TodoWrite"),
+		).length,
+	);
 	// Show a streaming dot indicator only when streaming and the model hasn't
-	// emitted any text or tool yet.
-	let showStreamingDots = $derived(isLive && blocks.length === 0);
+	// emitted any *visible* text or tool yet.
+	let showStreamingDots = $derived(isLive && visibleBlockCount === 0);
 	let lastToolCall = $derived.by((): ToolCallBlock | null => {
 		for (let i = blocks.length - 1; i >= 0; i--) {
 			const b = blocks[i];
-			if (b.kind === "tool_call") return b;
+			if (b.kind !== "tool_call") continue;
+			if (isLive && b.name === "TodoWrite") continue;
+			return b;
+		}
+		return null;
+	});
+
+	// Render all TodoWrite calls as a single widget: it "fills in" as the
+	// agent re-invokes TodoWrite with updated statuses. We show the widget at
+	// the position of the FIRST TodoWrite block with the LATEST todos data,
+	// and suppress all subsequent TodoWrite blocks.
+	let firstTodoIndex = $derived(
+		blocks.findIndex(
+			(b) => b.kind === "tool_call" && b.name === "TodoWrite",
+		),
+	);
+	let latestTodos = $derived.by<TodoItem[] | null>(() => {
+		for (let i = blocks.length - 1; i >= 0; i--) {
+			const b = blocks[i];
+			if (b.kind === "tool_call" && b.name === "TodoWrite") {
+				const todos = (b.input as { todos?: unknown })?.todos;
+				return Array.isArray(todos) ? (todos as TodoItem[]) : null;
+			}
 		}
 		return null;
 	});
@@ -116,6 +153,10 @@
 						</summary>
 						<pre>{block.thinking}</pre>
 					</details>
+				{:else if block.kind === "tool_call" && block.name === "TodoWrite"}
+					{#if !isLive && idx === firstTodoIndex && latestTodos}
+						<TodoList todos={latestTodos} />
+					{/if}
 				{:else if block.kind === "tool_call"}
 					<ToolCall tool={block} />
 				{:else if block.kind === "question"}
@@ -354,7 +395,9 @@
 	.bubble > :global(.thinking-block + .response-text),
 	.bubble > :global(.response-text + .thinking-block),
 	.bubble > :global(.tool-call + .thinking-block),
-	.bubble > :global(.thinking-block + .tool-call) {
+	.bubble > :global(.thinking-block + .tool-call),
+	.bubble > :global(.todo-list + *),
+	.bubble > :global(* + .todo-list) {
 		margin-top: 10px;
 	}
 

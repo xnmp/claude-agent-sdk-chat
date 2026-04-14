@@ -121,6 +121,41 @@ describe('ChatView auto-follow', () => {
 		expect(scrollContainer.scrollTop).toBeGreaterThanOrEqual(4700);
 	});
 
+	it('renders a standalone TodoList panel when the live turn has TodoWrite blocks', () => {
+		const liveTurn: LiveTurn = {
+			startedAt: Date.now(),
+			blocks: [
+				{
+					kind: 'tool_call',
+					id: 'tw1',
+					name: 'TodoWrite',
+					input: {
+						todos: [
+							{ content: 'Step A', status: 'in_progress', activeForm: 'Doing step A' },
+							{ content: 'Step B', status: 'pending', activeForm: 'Doing step B' }
+						]
+					},
+					result: null,
+					is_error: null
+				}
+			]
+		};
+		const { container } = render(ChatView, {
+			props: { ...defaultProps(), liveTurn }
+		});
+		// The panel lives outside the scrollable .messages list.
+		const panel = container.querySelector('.todo-panel');
+		expect(panel).not.toBeNull();
+		expect(panel!.querySelector('.todo-list')).not.toBeNull();
+		// Count reflects latest TodoWrite state.
+		expect(panel!.textContent).toContain('0/2');
+	});
+
+	it('omits the TodoList panel when there is no live turn', () => {
+		const { container } = render(ChatView, { props: defaultProps() });
+		expect(container.querySelector('.todo-panel')).toBeNull();
+	});
+
 	it('does NOT scroll when sticky is disengaged via wheel-up', async () => {
 		// Regression: text deltas growing blocks in place would yank the
 		// user back to the bottom even after they scrolled up to read.
