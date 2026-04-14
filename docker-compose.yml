@@ -58,10 +58,29 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8000}
     ports:
       - "8000:8000"
+    # Read-only root filesystem: the agent cannot persist malicious code
+    # into /app/backend/*.py or anywhere else outside the explicitly
+    # writable tmpfs/volume mounts below. Prevents a prompt-injection
+    # attack from surviving a task restart.
+    read_only: true
+    tmpfs:
+      # Python/stdlib temp files. Claude CLI also scratches here.
+      - /tmp:rw,size=64m
+      # Per-user XDG dirs the Python stack may touch at startup.
+      - /run/user/1001:rw,size=4m,uid=1001,gid=1001
     volumes:
       # Persist agent outputs and uploads across restarts.
       - agent-workspace:/app/agent-workspace
+      # Claude CLI writes config, session state, telemetry, and XDG-style
+      # dotfiles (~/.cache, ~/.claude, etc.) under $HOME. Mount the whole
+      # /home/app as a named volume so the entire home tree is writable
+      # and survives `docker compose up`. Mounting just /home/app/.claude
+      # isn't enough: the parent /home/app still comes from the read-only
+      # overlay rootfs, so any write to a sibling path (e.g. ~/.cache)
+      # fails silently and the CLI hangs.
+      - claude-home:/home/app
 
 volumes:
   pgdata:
   agent-workspace:
+  claude-home:

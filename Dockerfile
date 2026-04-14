@@ -125,8 +125,19 @@ USER app
 
 EXPOSE 8000
 
+# Bind uvicorn to the container's external interface instead of 0.0.0.0
+# so 127.0.0.1:8000 is not a listening socket. Prevents the agent's Bash
+# tool from hitting backend API routes via loopback — the simplest case
+# (curl 127.0.0.1:8000/...) gets ECONNREFUSED.
+#
+# The agent could still discover and reach the eth0 IP via `hostname -i`
+# or /proc/net/*, so this is a speed-bump, not a hard boundary. Real
+# enforcement comes from network-level egress controls upstream.
+#
+# HEALTHCHECK must target the same address because 127.0.0.1 has no
+# listener. Derive it the same way at healthcheck time.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/api/health || exit 1
+    CMD curl -fsS "http://$(python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))'):8000/api/health" || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn backend.app:app --host $(python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))') --port 8000"]
