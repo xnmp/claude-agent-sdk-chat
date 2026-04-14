@@ -225,6 +225,97 @@ describe('TurnBubble', () => {
 		expect(link).toHaveTextContent('analysis/results.csv');
 	});
 
+	it('renders TodoWrite tool calls as a todo list widget', () => {
+		const blocks: Block[] = [
+			{
+				kind: 'tool_call',
+				id: 'tw1',
+				name: 'TodoWrite',
+				input: {
+					todos: [
+						{ content: 'Design', status: 'completed', activeForm: 'Designing' },
+						{ content: 'Build API', status: 'in_progress', activeForm: 'Building API' },
+						{ content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }
+					]
+				},
+				result: 'ok',
+				is_error: false
+			}
+		];
+		const { container } = render(TurnBubble, {
+			props: { message: assistantMessage({ blocks }) }
+		});
+
+		// The generic ToolCall component must NOT be used for TodoWrite.
+		expect(container.querySelector('.tool-call')).toBeNull();
+
+		// Instead, a dedicated todo-list widget is rendered.
+		expect(container.querySelector('.todo-list')).not.toBeNull();
+		expect(screen.getByText('1/3')).toBeInTheDocument();
+
+		// Completed item shows the base content, in_progress item shows the activeForm.
+		expect(screen.getByText('Design')).toBeInTheDocument();
+		expect(screen.getByText('Building API')).toBeInTheDocument();
+		expect(screen.getByText('Write tests')).toBeInTheDocument();
+	});
+
+	it('merges multiple TodoWrite calls into a single widget showing latest state', () => {
+		// The agent calls TodoWrite repeatedly to update statuses. We want the
+		// widget to "fill in place" — the list appears once at the first
+		// TodoWrite position and reflects the LATEST snapshot, not a separate
+		// widget per call.
+		const blocks: Block[] = [
+			{
+				kind: 'tool_call',
+				id: 'tw1',
+				name: 'TodoWrite',
+				input: {
+					todos: [
+						{ content: 'Step one', status: 'pending', activeForm: 'Doing step one' },
+						{ content: 'Step two', status: 'pending', activeForm: 'Doing step two' }
+					]
+				},
+				result: 'ok',
+				is_error: false
+			},
+			{
+				kind: 'tool_call',
+				id: 'b1',
+				name: 'Bash',
+				input: { command: 'ls' },
+				result: 'file.txt',
+				is_error: false
+			},
+			{
+				kind: 'tool_call',
+				id: 'tw2',
+				name: 'TodoWrite',
+				input: {
+					todos: [
+						{ content: 'Step one', status: 'completed', activeForm: 'Doing step one' },
+						{ content: 'Step two', status: 'in_progress', activeForm: 'Doing step two' }
+					]
+				},
+				result: 'ok',
+				is_error: false
+			}
+		];
+		const { container } = render(TurnBubble, {
+			props: { message: assistantMessage({ blocks }) }
+		});
+
+		// Exactly one TodoList widget, showing the latest counts (1 of 2 done).
+		expect(container.querySelectorAll('.todo-list')).toHaveLength(1);
+		expect(screen.getByText('1/2')).toBeInTheDocument();
+
+		// The unrelated Bash tool call still renders as a normal ToolCall.
+		expect(container.querySelectorAll('.tool-call')).toHaveLength(1);
+		expect(screen.getByText('Bash')).toBeInTheDocument();
+
+		// In-progress item is labeled with its activeForm.
+		expect(screen.getByText('Doing step two')).toBeInTheDocument();
+	});
+
 	it('does not render download section when no created files', () => {
 		const { container } = render(TurnBubble, {
 			props: { message: assistantMessage({ created_files: [] }) }

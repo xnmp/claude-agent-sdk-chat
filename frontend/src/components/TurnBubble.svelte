@@ -10,6 +10,13 @@
 	import type { Settings } from "$lib/settings";
 	import StreamingMarkdown from "./StreamingMarkdown.svelte";
 	import ToolCall from "./ToolCall.svelte";
+	import TodoList from "./TodoList.svelte";
+
+	interface TodoItem {
+		content: string;
+		status: "pending" | "in_progress" | "completed";
+		activeForm: string;
+	}
 
 	let {
 		message = null,
@@ -67,6 +74,26 @@
 		}
 		return null;
 	});
+
+	// Render all TodoWrite calls as a single widget: it "fills in" as the
+	// agent re-invokes TodoWrite with updated statuses. We show the widget at
+	// the position of the FIRST TodoWrite block with the LATEST todos data,
+	// and suppress all subsequent TodoWrite blocks.
+	let firstTodoIndex = $derived(
+		blocks.findIndex(
+			(b) => b.kind === "tool_call" && b.name === "TodoWrite",
+		),
+	);
+	let latestTodos = $derived.by<TodoItem[] | null>(() => {
+		for (let i = blocks.length - 1; i >= 0; i--) {
+			const b = blocks[i];
+			if (b.kind === "tool_call" && b.name === "TodoWrite") {
+				const todos = (b.input as { todos?: unknown })?.todos;
+				return Array.isArray(todos) ? (todos as TodoItem[]) : null;
+			}
+		}
+		return null;
+	});
 </script>
 
 {#if isUser && userContent}
@@ -113,6 +140,10 @@
 						</summary>
 						<pre>{block.thinking}</pre>
 					</details>
+				{:else if block.kind === "tool_call" && block.name === "TodoWrite"}
+					{#if idx === firstTodoIndex && latestTodos}
+						<TodoList todos={latestTodos} />
+					{/if}
 				{:else if block.kind === "tool_call"}
 					<ToolCall tool={block} />
 				{/if}
@@ -349,7 +380,9 @@
 	.bubble > :global(.thinking-block + .response-text),
 	.bubble > :global(.response-text + .thinking-block),
 	.bubble > :global(.tool-call + .thinking-block),
-	.bubble > :global(.thinking-block + .tool-call) {
+	.bubble > :global(.thinking-block + .tool-call),
+	.bubble > :global(.todo-list + *),
+	.bubble > :global(* + .todo-list) {
 		margin-top: 10px;
 	}
 
