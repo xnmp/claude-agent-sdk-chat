@@ -29,7 +29,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..config import AGENT_CWD, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, AUTH_PROXY_ENABLED, AUTH_PROXY_PORT
+from ..config import AGENT_CWD, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_MODEL, AUTH_PROXY_ENABLED, AUTH_PROXY_PORT
 from .hooks import make_hooks
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
@@ -97,7 +97,7 @@ def _build_agent_env() -> dict[str, str]:
     2. When a key is configured, replace it with a dummy (proxy injects the real one)
     3. Blank out other known secrets (DATABASE_URL, etc.)
 
-    When no ANTHROPIC_API_KEY is configured, the CLI uses its own stored
+    When no ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is configured, the CLI uses its own stored
     credentials (OAuth from ~/.claude/), so we don't override it.
     """
     if not AUTH_PROXY_ENABLED:
@@ -122,10 +122,13 @@ def _build_agent_env() -> dict[str, str]:
     for var in _SECRET_VARS - {"ANTHROPIC_API_KEY"}:
         env[var] = ""
 
-    # Only override the API key when we have a real one to inject via proxy.
-    # Otherwise let the CLI use its own stored credentials.
-    if ANTHROPIC_API_KEY:
-        logger.info("Using auth proxy with injected API key; setting %s=proxy-managed", "ANTHROPIC_API_KEY")
+    # Only override the API key when we have credentials to inject via proxy.
+    # Otherwise let the CLI use its own stored credentials (OAuth from ~/.claude/).
+    if ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN:
+        if ANTHROPIC_API_KEY:
+            logger.info("Using auth proxy with injected API key; setting %s=proxy-managed", "ANTHROPIC_API_KEY")
+        else:
+            logger.info("Using auth proxy with injected AUTH token; setting %s=proxy-managed", "ANTHROPIC_AUTH_TOKEN")
         env["ANTHROPIC_API_KEY"] = "proxy-managed"
 
     # Point agent to the local auth proxy

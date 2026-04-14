@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import (
     ANTHROPIC_API_KEY,
+    ANTHROPIC_AUTH_TOKEN,
     ANTHROPIC_BASE_URL,
     AUTH_PROXY_ENABLED,
     AUTH_PROXY_PORT,
@@ -35,7 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     if AUTH_PROXY_ENABLED:
         upstream = ANTHROPIC_BASE_URL or "https://api.anthropic.com"
-        await start_proxy(AUTH_PROXY_PORT, ANTHROPIC_API_KEY, upstream)
+        await start_proxy(AUTH_PROXY_PORT, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, upstream)
 
     pool = await init_pool()
 

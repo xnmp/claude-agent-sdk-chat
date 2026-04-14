@@ -45,7 +45,7 @@ _server_task: asyncio.Task[None] | None = None
 _client: httpx.AsyncClient | None = None
 
 
-def _build_app(api_key: str, upstream_url: str) -> Starlette:
+def _build_app(api_key: str, auth_token: str, upstream_url: str) -> Starlette:
     """Build the proxy Starlette app with the given credentials."""
 
     @asynccontextmanager
@@ -75,13 +75,16 @@ def _build_app(api_key: str, upstream_url: str) -> Starlette:
 
         body = await request.body()
 
-        denylist = _HEADER_DENYLIST_ALWAYS | (_HEADER_DENYLIST_AUTH if api_key else frozenset())
+        has_creds = bool(api_key or auth_token)
+        denylist = _HEADER_DENYLIST_ALWAYS | (_HEADER_DENYLIST_AUTH if has_creds else frozenset())
         headers = {
             k: v for k, v in request.headers.items()
             if k.lower() not in denylist
         }
         if api_key:
             headers["x-api-key"] = api_key
+        elif auth_token:
+            headers["authorization"] = f"Bearer {auth_token}"
 
         upstream_req = _client.build_request(
             method=request.method,
@@ -118,11 +121,11 @@ def _build_app(api_key: str, upstream_url: str) -> Starlette:
     )
 
 
-async def start_proxy(port: int, api_key: str, upstream_url: str) -> None:
+async def start_proxy(port: int, api_key: str, auth_token: str, upstream_url: str) -> None:
     """Start the auth proxy server as a background asyncio task."""
     global _server, _server_task
 
-    app = _build_app(api_key, upstream_url)
+    app = _build_app(api_key, auth_token, upstream_url)
 
     config = uvicorn.Config(
         app=app,
