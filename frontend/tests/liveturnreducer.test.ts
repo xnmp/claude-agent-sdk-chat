@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { processWsMessage } from '$lib/liveTurnReducer';
-import type { LiveTurn, ToolCallBlock, WsMessage } from '$lib/types';
+import type { LiveTurn, QuestionBlock, ToolCallBlock, WsMessage } from '$lib/types';
 
 function emptyTurn(): LiveTurn {
 	return { startedAt: Date.now(), blocks: [] };
@@ -318,6 +318,150 @@ describe('processWsMessage', () => {
 		const msg: WsMessage = { type: 'error', message: 'something broke' };
 		const action = processWsMessage(msg, emptyTurn());
 		expect(action.kind).toBe('error');
+	});
+
+	describe('mcp__askuser__ask specialization', () => {
+		const ASK = 'mcp__askuser__ask';
+
+		it('runs an askuser call from tool_use through tool_result', () => {
+			// Full lifecycle: an askuser tool call should render as a question
+			// block (not a tool_call card), accumulate question text and options
+			// from the paired tool_input, and end up answered with the user's
+			// selection echoed back via tool_result.
+			const msgs: WsMessage[] = [
+				{ type: 'tool_use', id: 'q1', name: ASK, message_id: 'm1' },
+				{
+					type: 'tool_input',
+					tool_use_id: 'q1',
+					input: { question: 'Tea or coffee?', options: ['Tea', 'Coffee'] }
+				},
+				{ type: 'tool_result', tool_use_id: 'q1', content: 'Tea', is_error: false }
+			];
+			let turn: LiveTurn | null = emptyTurn();
+			for (const m of msgs) {
+				turn = (processWsMessage(m, turn) as { turn: LiveTurn }).turn;
+			}
+
+			expect(kinds(turn)).toEqual(['question']);
+			const block = turn.blocks[0] as QuestionBlock;
+			expect(block.tool_use_id).toBe('q1');
+			expect(block.question).toBe('Tea or coffee?');
+			expect(block.options).toEqual(['Tea', 'Coffee']);
+			expect(block.answered).toBe(true);
+			expect(block.selected).toBe('Tea');
+		});
+
+		it('non-askuser tool_use still becomes a tool_call block', () => {
+			const action = processWsMessage(
+				{ type: 'tool_use', id: 't1', name: 'Read', message_id: 'm1' },
+				emptyTurn()
+			);
+			if (action.kind === 'update') {
+				expect(kinds(action.turn)).toEqual(['tool_call']);
+			}
+		});
+
+		it('coerces malformed tool_input into safe defaults', () => {
+			// Defensive: agent could emit something the schema doesn't catch.
+			let turn: LiveTurn | null = emptyTurn();
+			turn = (
+				processWsMessage(
+					{ type: 'tool_use', id: 'q1', name: ASK, message_id: 'm1' },
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+			turn = (
+				processWsMessage(
+					{
+						type: 'tool_input',
+						tool_use_id: 'q1',
+						// question missing, options has a non-string entry
+						input: { options: ['ok', 42, null] }
+					},
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+
+			const block = turn.blocks[0] as QuestionBlock;
+			expect(block.question).toBe('');
+			expect(block.options).toEqual(['ok']);
+		});
+
+		it('marks the question answered on tool_result', () => {
+			let turn: LiveTurn | null = emptyTurn();
+			turn = (
+				processWsMessage(
+					{ type: 'tool_use', id: 'q1', name: ASK, message_id: 'm1' },
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+			turn = (
+				processWsMessage(
+					{
+						type: 'tool_input',
+						tool_use_id: 'q1',
+						input: { question: 'Tea or coffee?', options: ['Tea', 'Coffee'] }
+					},
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+			turn = (
+				processWsMessage(
+					{ type: 'tool_result', tool_use_id: 'q1', content: 'Tea', is_error: false },
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+
+			const block = turn.blocks[0] as QuestionBlock;
+			expect(block.answered).toBe(true);
+			expect(block.selected).toBe('Tea');
+		});
+
+		it('preserves an optimistic `selected` set before the tool_result arrives', () => {
+			// The frontend marks `answered + selected` as soon as the user clicks,
+			// so when the tool_result echoes back we must not overwrite the user's
+			// choice with the tool-result content (they should agree, but the
+			// optimistic value is the source of truth for what the user actually
+			// clicked).
+			let turn: LiveTurn | null = emptyTurn();
+			turn = (
+				processWsMessage(
+					{ type: 'tool_use', id: 'q1', name: ASK, message_id: 'm1' },
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+			turn.blocks = turn.blocks.map((b) =>
+				b.kind === 'question' ? { ...b, answered: true, selected: 'Tea' } : b
+			);
+			turn = (
+				processWsMessage(
+					{ type: 'tool_result', tool_use_id: 'q1', content: 'something else', is_error: false },
+					turn
+				) as { turn: LiveTurn }
+			).turn;
+
+			const block = turn.blocks[0] as QuestionBlock;
+			expect(block.selected).toBe('Tea');
+			expect(block.answered).toBe(true);
+		});
+
+		it('tool_result for an unknown id falls through to tool_call mapping', () => {
+			// Regression: the question-vs-tool_call branch must key on the block
+			// type, not just the existence of the id, so an unrelated tool_result
+			// doesn't get swallowed by the question branch.
+			const turn = emptyTurn();
+			turn.blocks = [
+				{ kind: 'tool_call', id: 't1', name: 'Read', input: {}, result: null, is_error: null }
+			];
+			const action = processWsMessage(
+				{ type: 'tool_result', tool_use_id: 't1', content: 'ok', is_error: false },
+				turn
+			);
+			if (action.kind === 'update') {
+				const block = action.turn.blocks[0] as ToolCallBlock;
+				expect(block.result).toBe('ok');
+			}
+		});
 	});
 
 	it('does not mutate input turn', () => {
