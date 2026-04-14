@@ -81,6 +81,19 @@ class TestEnforceOutputDir:
         )
         assert result == {}
 
+    async def test_allows_write_to_extra_writable_dir(self, tmp_path, output_dir, scripts_dir, uploads_dir):
+        docs_dir = str(tmp_path / "docs")
+        os.makedirs(docs_dir)
+        config = make_hooks(output_dir, scripts_dir, uploads_dir, extra_writable_dirs=[docs_dir])
+        enforce = config["hooks"]["PreToolUse"][0].hooks[0]
+
+        result = await enforce(
+            {"tool_input": {"file_path": os.path.join(docs_dir, "readme.md")}},
+            "tu-1",
+            {"signal": None},
+        )
+        assert result.get("hookSpecificOutput") is None
+
     async def test_allows_no_file_path_key(self, hook_config):
         enforce = hook_config["hooks"]["PreToolUse"][0].hooks[0]
 

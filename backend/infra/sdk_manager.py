@@ -372,12 +372,19 @@ class SDKManager:
         output_dir = os.path.join(AGENT_CWD, "output")
         scripts_dir = os.path.join(AGENT_CWD, "output_scripts")
         uploads_dir = os.path.join(AGENT_CWD, "uploads")
-        for d in [output_dir, scripts_dir, uploads_dir]:
+        docs_dir = os.path.join(AGENT_CWD, "docs")
+        for d in [output_dir, scripts_dir, uploads_dir, docs_dir]:
             os.makedirs(d, exist_ok=True)
-        hook_config = make_hooks(output_dir, scripts_dir, uploads_dir, extra_readable_dirs=[
-            os.path.expanduser("~/.claude/skills"),
-            str(_REPO_ROOT / ".claude" / "skills"),
-        ])
+        hook_config = make_hooks(
+            output_dir,
+            scripts_dir,
+            uploads_dir,
+            extra_readable_dirs=[
+                os.path.expanduser("~/.claude/skills"),
+                str(_REPO_ROOT / ".claude" / "skills"),
+            ],
+            extra_writable_dirs=[docs_dir],
+        )
 
         options = ClaudeAgentOptions(
             allowed_tools=[
