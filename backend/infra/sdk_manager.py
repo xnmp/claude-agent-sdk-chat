@@ -48,7 +48,7 @@ _SANDBOX_SETTINGS = {
 # Standalone stdio MCP servers spawned alongside the agent. The SDK launches
 # these as subprocesses and speaks JSON-RPC over stdin/stdout — they run
 # *outside* the Bash sandbox, so they don't need any of the sandbox relaxations
-# that would be required to reach a TCP localhost service. See `mytools/`.
+# that would be required to reach a TCP localhost service. 
 
 # process was loaded with.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent

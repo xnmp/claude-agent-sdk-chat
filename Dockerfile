@@ -100,7 +100,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # build output changes often. Ordering this way maximizes cache hits on
 # the typical "edited a backend file" rebuild.
 COPY --link --chown=1001:1001 schema.sql ./schema.sql
-COPY --link --chown=1001:1001 mytools/ ./mytools/
+COPY --link --chown=1001:1001 mcps/ ./mcps/
 COPY --link --chown=1001:1001 backend/ ./backend/
 
 # Copy the built frontend from stage 1 into the location backend/app.py
