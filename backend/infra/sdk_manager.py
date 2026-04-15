@@ -376,7 +376,10 @@ class ClaudeSDKClientAdapter:
             parsed_input = {}
 
         tool_id = block.get("id") or ""
-        logger.info("tool_use: name={} id={}", block.get("name"), tool_id)
+        logger.info(
+            "sdk stream tool_use: name={} id={} {}",
+            block.get("name"), _short_id(tool_id), _short_args(parsed_input),
+        )
         if tool_id:
             self._streamed_tool_use_ids.add(tool_id)
         return [ToolUseEvent(
@@ -414,7 +417,10 @@ class ClaudeSDKClientAdapter:
                 if block.id in self._streamed_tool_use_ids:
                     continue
                 self._streamed_tool_use_ids.add(block.id)
-                logger.info("reconcile tool_use from buffered: name={} id={}", block.name, block.id)
+                logger.info(
+                    "reconcile tool_use: name={} id={} {}",
+                    block.name, _short_id(block.id), _short_args(block.input),
+                )
                 events.append(ToolUseEvent(
                     id=block.id,
                     name=block.name,
@@ -425,13 +431,13 @@ class ClaudeSDKClientAdapter:
                 if self._streamed_text_had_content:
                     continue
                 self._streamed_text_had_content = True
-                logger.info("reconcile text from buffered: len={}", len(block.text))
+                logger.info("reconcile text: len={} {}", len(block.text), _preview(block.text))
                 events.append(TextEvent(text=block.text, message_id=self._current_message_id))
             elif isinstance(block, ThinkingBlock):
                 if self._streamed_thinking_had_content:
                     continue
                 self._streamed_thinking_had_content = True
-                logger.info("reconcile thinking from buffered: len={}", len(block.thinking))
+                logger.info("reconcile thinking: len={} {}", len(block.thinking), _preview(block.thinking))
                 events.append(ThinkingEvent(
                     thinking=block.thinking,
                     signature=block.signature or "",
@@ -440,27 +446,64 @@ class ClaudeSDKClientAdapter:
         return events
 
 
+# -- Logging helpers --------------------------------------------------------
+#
+# Kept at module level so they're usable from both the receive_response
+# summary logs and the deeper _on_block_stop / _translate_assistant_meta
+# call sites without duplicating truncation logic.
+
+
+def _preview(s: str, n: int = 15) -> str:
+    """Short quoted preview of a text blob for log lines."""
+    head = s[:n].replace("\n", " ")
+    return f'"{head}{"…" if len(s) > n else ""}"'
+
+
+def _short_id(s: str) -> str:
+    """Last 8 chars of an id. Tool-use ids look like ``toolu_01Abc…`` — the
+    prefix is fixed noise, the trailing entropy is what's useful to correlate
+    tool_use ↔ tool_result across log lines."""
+    return s[-8:] if len(s) > 8 else s
+
+
+def _short_args(args: Any) -> str:
+    """Compact JSON-ish preview of a tool_use input dict.
+
+    Each top-level value is individually truncated to 15 chars so long
+    commands / file bodies / descriptions don't blow out the log line.
+    """
+    if not isinstance(args, dict):
+        return _preview(str(args))
+
+    def trunc_value(v: Any) -> str:
+        s = v if isinstance(v, str) else json.dumps(v, separators=(",", ":"))
+        head = s[:15].replace("\n", " ")
+        quoted = isinstance(v, str)
+        body = f"{head}{'…' if len(s) > 15 else ''}"
+        return f'"{body}"' if quoted else body
+
+    parts = [f'"{k}":{trunc_value(v)}' for k, v in args.items()]
+    return "{" + ",".join(parts) + "}"
+
+
+def _short_result(content: Any) -> str:
+    """Truncated preview of a tool_result's content for log lines."""
+    s = content if isinstance(content, str) else str(content)
+    return _preview(s, 30)
+
+
 def _block_summary(content: list[Any]) -> str:
     """One-line description of a content-block list for logging."""
-    def preview(s: str) -> str:
-        head = s[:15].replace("\n", " ")
-        return f'"{head}{"…" if len(s) > 15 else ""}"'
-
-    def short_id(s: str) -> str:
-        # Tool-use ids look like "toolu_01Abc…" or "tu_abc…" — the prefix
-        # isn't useful in logs, the trailing entropy is.
-        return s[-8:] if len(s) > 8 else s
-
     parts: list[str] = []
     for b in content:
         if isinstance(b, TextBlock):
-            parts.append(f"text({len(b.text)},{preview(b.text)})")
+            parts.append(f"text({len(b.text)},{_preview(b.text)})")
         elif isinstance(b, ThinkingBlock):
-            parts.append(f"thinking({len(b.thinking)},{preview(b.thinking)})")
+            parts.append(f"thinking({len(b.thinking)},{_preview(b.thinking)})")
         elif isinstance(b, ToolUseBlock):
-            parts.append(f"tool_use({b.name},id={short_id(b.id)})")
+            parts.append(f"tool_use({b.name},id={_short_id(b.id)},{_short_args(b.input)})")
         elif isinstance(b, ToolResultBlock):
-            parts.append(f"tool_result(id={short_id(b.tool_use_id)})")
+            parts.append(f"tool_result(id={_short_id(b.tool_use_id)},{_short_result(b.content)})")
         else:
             parts.append(type(b).__name__)
     return "[" + ",".join(parts) + "]"
