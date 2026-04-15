@@ -148,8 +148,10 @@ from ..domain.models import (
     SDKEvent,
     TextBlockStartEvent,
     TextDeltaEvent,
+    TextEvent,
     ThinkingBlockStartEvent,
     ThinkingDeltaEvent,
+    ThinkingEvent,
     ToolResultEvent,
     ToolUseEvent,
 )
@@ -167,9 +169,20 @@ class ClaudeSDKClientAdapter:
       - buffer ``input_json_delta`` fragments and emit one ``ToolUseEvent``
         with the parsed input on ``content_block_stop``
 
-    The buffered ``AssistantMessage`` that the SDK still delivers is then used
-    only for ``model``/``usage`` metadata — its content blocks would duplicate
-    what the stream events already produced.
+    Start events (``TextBlockStartEvent`` / ``ThinkingBlockStartEvent``) are
+    **deferred** until the first corresponding delta arrives, so empty content
+    blocks (``content_block_start`` followed immediately by ``content_block_stop``
+    with no deltas in between, as sometimes seen on models that open a
+    placeholder text block before streaming thinking) don't leak empty bubbles
+    into the UI.
+
+    The buffered ``AssistantMessage`` is usually just metadata (``model``,
+    ``usage``), but with some models the stream can stop emitting events after
+    thinking deltas — the final text answer and any tool_use blocks then only
+    arrive via ``AssistantMessage``. In that case the adapter reconciles the
+    buffered content against what the stream already produced (tracked via
+    the ``_streamed_*`` flags) and emits ``TextEvent`` / ``ThinkingEvent`` /
+    ``ToolUseEvent`` for any block the stream didn't cover.
     """
 
     def __init__(
@@ -183,6 +196,13 @@ class ClaudeSDKClientAdapter:
         self.askuser_bridge: AskUserBridge | None = askuser_bridge
         self._current_message_id: str = ""
         self._open_blocks: dict[int, dict[str, Any]] = {}
+        # Per-message reconciliation state — reset on every ``message_start``.
+        # Tracks what the *stream* path successfully produced, so the buffered
+        # ``AssistantMessage`` handler can emit only the blocks the stream
+        # didn't already cover. See ``_translate_assistant_meta``.
+        self._streamed_text_had_content: bool = False
+        self._streamed_thinking_had_content: bool = False
+        self._streamed_tool_use_ids: set[str] = set()
 
     def submit_question_answer(self, answer: str) -> bool:
         """Resolve a pending askuser question with the user's answer.
@@ -224,11 +244,12 @@ class ClaudeSDKClientAdapter:
                     yield event
             elif isinstance(msg, AssistantMessage):
                 logger.info("sdk AssistantMessage: {}", msg)
-                # Content blocks (text/thinking/tool_use) come from stream events;
-                # only forward the model/usage metadata here. Tool *results* sometimes
-                # arrive as ToolResultBlocks on AssistantMessage in synthetic flows,
-                # so still emit those.
-                for event in _translate_assistant_meta(msg):
+                # Usually just model/usage metadata + tool results, because text/
+                # thinking/tool_use come via stream events. When the stream is
+                # incomplete (e.g. stream dies after thinking deltas on some
+                # models), the adapter reconciles against the buffered content
+                # and emits whatever the stream didn't cover.
+                for event in self._translate_assistant_meta(msg):
                     yield event
             elif isinstance(msg, UserMessage):
                 logger.info("sdk UserMessage: {}", msg)
@@ -261,6 +282,9 @@ class ClaudeSDKClientAdapter:
             inner = ev.get("message") or {}
             self._current_message_id = inner.get("id") or msg.uuid or ""
             self._open_blocks = {}
+            self._streamed_text_had_content = False
+            self._streamed_thinking_had_content = False
+            self._streamed_tool_use_ids = set()
             return []
 
         if et == "content_block_start":
@@ -282,23 +306,19 @@ class ClaudeSDKClientAdapter:
         logger.debug("block start: index={} type={} name={}", index, cb_type, cb.get("name"))
 
         # Initialize state for this open block. Tool-use blocks need a buffer
-        # for the partial JSON deltas that follow.
+        # for the partial JSON deltas that follow. ``start_emitted`` tracks
+        # whether we've already yielded the paired Start event — deferred until
+        # the first delta arrives so empty content blocks (start+stop with no
+        # deltas) don't leak empty bubbles into the UI.
         self._open_blocks[index] = {
             "type": cb_type,
             "id": cb.get("id"),
             "name": cb.get("name"),
             "json_buf": "",
+            "start_emitted": False,
         }
-
-        if cb_type == "text":
-            return [TextBlockStartEvent(
-                block_index=index, message_id=self._current_message_id,
-            )]
-        if cb_type == "thinking":
-            return [ThinkingBlockStartEvent(
-                block_index=index, message_id=self._current_message_id,
-            )]
-        # tool_use: don't emit until we have the full input on content_block_stop
+        # text/thinking: defer start event until first delta
+        # tool_use: emit nothing until content_block_stop gives us full input
         return []
 
     def _on_block_delta(self, ev: dict[str, Any]) -> list[SDKEvent]:
@@ -308,17 +328,33 @@ class ClaudeSDKClientAdapter:
         block = self._open_blocks.get(index)
 
         if dt == "text_delta":
-            return [TextDeltaEvent(
+            self._streamed_text_had_content = True
+            events: list[SDKEvent] = []
+            if block is not None and not block.get("start_emitted"):
+                events.append(TextBlockStartEvent(
+                    block_index=index, message_id=self._current_message_id,
+                ))
+                block["start_emitted"] = True
+            events.append(TextDeltaEvent(
                 text=delta.get("text", ""),
                 block_index=index,
                 message_id=self._current_message_id,
-            )]
+            ))
+            return events
         if dt == "thinking_delta":
-            return [ThinkingDeltaEvent(
+            self._streamed_thinking_had_content = True
+            events = []
+            if block is not None and not block.get("start_emitted"):
+                events.append(ThinkingBlockStartEvent(
+                    block_index=index, message_id=self._current_message_id,
+                ))
+                block["start_emitted"] = True
+            events.append(ThinkingDeltaEvent(
                 thinking=delta.get("thinking", ""),
                 block_index=index,
                 message_id=self._current_message_id,
-            )]
+            ))
+            return events
         if dt == "input_json_delta" and block is not None:
             block["json_buf"] = block.get("json_buf", "") + (delta.get("partial_json") or "")
         # signature_delta: not currently surfaced (cryptographic signature for
@@ -339,32 +375,69 @@ class ClaudeSDKClientAdapter:
             logger.warning("tool_use block: failed to parse input JSON (index={}, name={})", index, block.get("name"))
             parsed_input = {}
 
-        logger.info("tool_use: name={} id={}", block.get("name"), block.get("id"))
+        tool_id = block.get("id") or ""
+        logger.info("tool_use: name={} id={}", block.get("name"), tool_id)
+        if tool_id:
+            self._streamed_tool_use_ids.add(tool_id)
         return [ToolUseEvent(
-            id=block.get("id") or "",
+            id=tool_id,
             name=block.get("name") or "",
             input=parsed_input if isinstance(parsed_input, dict) else {},
             message_id=self._current_message_id,
         )]
 
+    # -- Buffered-message reconciliation -----------------------------------
 
-def _translate_assistant_meta(msg: AssistantMessage) -> list[SDKEvent]:
-    """Forward only metadata from a buffered AssistantMessage.
+    def _translate_assistant_meta(self, msg: AssistantMessage) -> list[SDKEvent]:
+        """Translate a buffered ``AssistantMessage`` into domain events.
 
-    Content blocks (text/thinking/tool_use) are skipped because they're already
-    produced by the streaming path. Tool result blocks, which sometimes appear
-    on synthetic AssistantMessages, are still translated.
-    """
-    events: list[SDKEvent] = []
-    if msg.model or msg.usage:
-        events.append(ModelInfoEvent(model=msg.model or "", usage=msg.usage or {}))
-    for block in msg.content:
-        if isinstance(block, ToolResultBlock):
-            content = block.content if isinstance(block.content, str) else str(block.content)
-            events.append(
-                ToolResultEvent(tool_use_id=block.tool_use_id, content=content, is_error=block.is_error or False)
-            )
-    return events
+        Always forwards model/usage metadata and any ``ToolResultBlock``s.
+        For ``TextBlock`` / ``ThinkingBlock`` / ``ToolUseBlock``, reconciles
+        against what the stream path already produced (via
+        ``_streamed_text_had_content``, ``_streamed_thinking_had_content``,
+        ``_streamed_tool_use_ids``) and emits only blocks the stream didn't
+        cover. This handles models where the SDK stops yielding stream events
+        after thinking deltas and the final content only arrives buffered.
+        """
+        events: list[SDKEvent] = []
+        if msg.model or msg.usage:
+            events.append(ModelInfoEvent(model=msg.model or "", usage=msg.usage or {}))
+        for block in msg.content:
+            if isinstance(block, ToolResultBlock):
+                content = block.content if isinstance(block.content, str) else str(block.content)
+                events.append(ToolResultEvent(
+                    tool_use_id=block.tool_use_id,
+                    content=content,
+                    is_error=block.is_error or False,
+                ))
+            elif isinstance(block, ToolUseBlock):
+                if block.id in self._streamed_tool_use_ids:
+                    continue
+                self._streamed_tool_use_ids.add(block.id)
+                logger.info("reconcile tool_use from buffered: name={} id={}", block.name, block.id)
+                events.append(ToolUseEvent(
+                    id=block.id,
+                    name=block.name,
+                    input=block.input if isinstance(block.input, dict) else {},
+                    message_id=self._current_message_id,
+                ))
+            elif isinstance(block, TextBlock):
+                if self._streamed_text_had_content:
+                    continue
+                self._streamed_text_had_content = True
+                logger.info("reconcile text from buffered: len={}", len(block.text))
+                events.append(TextEvent(text=block.text, message_id=self._current_message_id))
+            elif isinstance(block, ThinkingBlock):
+                if self._streamed_thinking_had_content:
+                    continue
+                self._streamed_thinking_had_content = True
+                logger.info("reconcile thinking from buffered: len={}", len(block.thinking))
+                events.append(ThinkingEvent(
+                    thinking=block.thinking,
+                    signature=block.signature or "",
+                    message_id=self._current_message_id,
+                ))
+        return events
 
 
 def _translate_user(msg: UserMessage) -> list[SDKEvent]:
