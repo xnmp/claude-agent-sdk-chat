@@ -45,11 +45,8 @@ from backend.domain.models import (
     ToolResultEvent,
     ToolUseEvent,
 )
-from backend.infra.sdk_manager import (
-    ClaudeSDKClientAdapter,
-    _SANDBOX_SETTINGS,
-    _translate_user,
-)
+from backend.infra.sdk_adapter import ClaudeSDKClientAdapter, _translate_user
+from backend.infra.sdk_manager import _SANDBOX_SETTINGS
 
 
 def _stream_event(event: dict[str, Any]) -> StreamEvent:
