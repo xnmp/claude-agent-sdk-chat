@@ -49,17 +49,36 @@ _SANDBOX_SETTINGS = {
 # these as subprocesses and speaks JSON-RPC over stdin/stdout — they run
 # *outside* the Bash sandbox, so they don't need any of the sandbox relaxations
 # that would be required to reach a TCP localhost service. See `mytools/`.
-#
-# --directory pins `uv run` to the repo root regardless of AGENT_CWD, so the
-# MCP subprocess always resolves `mytools.server` to the same module that this
+
 # process was loaded with.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-_MCP_SERVERS: dict[str, dict[str, object]] = {
-    "mytools": {
-        "command": "uv",
-        "args": ["run", "--directory", str(_REPO_ROOT), "python", "-m", "mytools.server"],
-    },
-}
+_MCP_ROOT = _REPO_ROOT / "backend" / "mcps"
+
+def _discover_mcp_servers() -> dict[str, dict[str, object]]:
+    """Scan _MCP_ROOT/scripts/*.py and register each as an MCP server.
+
+    Server name is the filename stem with a trailing '_mcp' stripped
+    (e.g. teradata_mcp.py → teradata).  Falls back to an empty dict
+    if the directory doesn't exist so a missing checkout doesn't crash startup.
+    """
+    scripts_dir = _MCP_ROOT
+    python_bin = str(_REPO_ROOT / ".venv" / "bin" / "python")
+    servers: dict[str, dict[str, object]] = {}
+
+    if not scripts_dir.exists():
+        logger.warning("MCP scripts dir not found, skipping discovery: {}", scripts_dir)
+        return servers
+
+    for script in sorted(scripts_dir.glob("*.py")):
+        name = script.stem.removesuffix("_mcp")
+        servers[name] = {"command": python_bin, "args": [str(script)]}
+        logger.info("discovered MCP server: name={} script={}", name, script)
+
+    return servers
+
+_MCP_SERVERS: dict[str, dict[str, object]] = _discover_mcp_servers()
+
+logger.warning("MCP servers registered: {}", _MCP_SERVERS)
 
 # Derived from _MCP_SERVERS — every tool on every registered MCP server is
 # allowed via the `mcp__<server>__*` wildcard, so this file stays in sync
