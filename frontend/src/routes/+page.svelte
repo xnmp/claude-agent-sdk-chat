@@ -96,12 +96,13 @@
 		}
 	});
 
-	onMount(() => {
+	onMount(async () => {
 		applyTheme(settings.theme);
 		const stored = localStorage.getItem('user');
 		if (stored) {
 			currentUser = JSON.parse(stored);
-			loadConversations();
+			await loadConversations();
+			await ensureActiveConversationAndFocus();
 		}
 	});
 
@@ -115,7 +116,21 @@
 		const user = await login(email, displayName);
 		localStorage.setItem('user', JSON.stringify(user));
 		currentUser = user;
-		loadConversations();
+		await loadConversations();
+		await ensureActiveConversationAndFocus();
+	}
+
+	// Pick up the most recent conversation or create a new one if none exists,
+	// then focus the composer once the WS is connected. Runs on fresh page
+	// loads and right after login so the user can always start typing
+	// immediately.
+	async function ensureActiveConversationAndFocus() {
+		pendingNewChatFocus = true;
+		if (conversations.length > 0) {
+			await selectConversation(conversations[0].id);
+		} else {
+			await handleNewChat();
+		}
 	}
 
 	function handleLogout() {
