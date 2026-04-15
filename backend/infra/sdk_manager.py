@@ -446,6 +446,11 @@ def _block_summary(content: list[Any]) -> str:
         head = s[:15].replace("\n", " ")
         return f'"{head}{"…" if len(s) > 15 else ""}"'
 
+    def short_id(s: str) -> str:
+        # Tool-use ids look like "toolu_01Abc…" or "tu_abc…" — the prefix
+        # isn't useful in logs, the trailing entropy is.
+        return s[-8:] if len(s) > 8 else s
+
     parts: list[str] = []
     for b in content:
         if isinstance(b, TextBlock):
@@ -453,9 +458,9 @@ def _block_summary(content: list[Any]) -> str:
         elif isinstance(b, ThinkingBlock):
             parts.append(f"thinking({len(b.thinking)},{preview(b.thinking)})")
         elif isinstance(b, ToolUseBlock):
-            parts.append(f"tool_use({b.name},id={b.id})")
+            parts.append(f"tool_use({b.name},id={short_id(b.id)})")
         elif isinstance(b, ToolResultBlock):
-            parts.append(f"tool_result({b.tool_use_id})")
+            parts.append(f"tool_result(id={short_id(b.tool_use_id)})")
         else:
             parts.append(type(b).__name__)
     return "[" + ",".join(parts) + "]"
