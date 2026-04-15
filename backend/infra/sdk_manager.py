@@ -376,6 +376,16 @@ class ClaudeSDKClientAdapter:
             parsed_input = {}
 
         tool_id = block.get("id") or ""
+        # Dedup against reconciliation: if the buffered AssistantMessage
+        # arrived before this content_block_stop, reconciliation already
+        # emitted a ToolUseEvent for this id and added it to the set. Don't
+        # emit a duplicate.
+        if tool_id and tool_id in self._streamed_tool_use_ids:
+            logger.debug(
+                "sdk stream tool_use: dedup name={} id={} (already reconciled)",
+                block.get("name"), _short_id(tool_id),
+            )
+            return []
         logger.info(
             "sdk stream tool_use: name={} id={} {}",
             block.get("name"), _short_id(tool_id), _short_args(parsed_input),

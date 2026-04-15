@@ -220,6 +220,38 @@ class TestTranslateAssistantMeta:
 
         assert not any(isinstance(e, ToolUseEvent) for e in events)
 
+    def test_tool_use_not_duplicated_when_buffered_arrives_before_stream_stop(self):
+        """Ordering-bug regression: if the buffered AssistantMessage arrives
+        *before* the stream's content_block_stop, we must emit only once.
+        Previously reconciliation emitted on AssistantMessage and then
+        _on_block_stop emitted a second ToolUseEvent unconditionally,
+        causing duplicate tool-call bubbles in the UI."""
+        adapter = _make_adapter()
+        _start_message(adapter)
+        adapter._handle_stream_event(_stream_event({
+            "type": "content_block_start", "index": 0,
+            "content_block": {"type": "tool_use", "id": "tu-1", "name": "Read", "input": {}},
+        }))
+        adapter._handle_stream_event(_stream_event({
+            "type": "content_block_delta", "index": 0,
+            "delta": {"type": "input_json_delta", "partial_json": '{"file_path":"/a"}'},
+        }))
+
+        # Buffered AssistantMessage arrives BEFORE the stream's stop.
+        msg = AssistantMessage(
+            content=[ToolUseBlock(id="tu-1", name="Read", input={"file_path": "/a"})],
+            model="m",
+        )
+        buffered_events = adapter._translate_assistant_meta(msg)
+        tool_events = [e for e in buffered_events if isinstance(e, ToolUseEvent)]
+        assert len(tool_events) == 1
+
+        # Late stream stop must not emit a second ToolUseEvent.
+        stop_events = adapter._handle_stream_event(_stream_event({
+            "type": "content_block_stop", "index": 0,
+        }))
+        assert not any(isinstance(e, ToolUseEvent) for e in stop_events)
+
     def test_tool_use_block_emitted_when_stream_did_not_see_it(self):
         """Broken-stream path: a tool_use only exists on the buffered
         AssistantMessage. Must be emitted so its downstream
