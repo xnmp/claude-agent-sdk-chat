@@ -1,12 +1,19 @@
 """FastAPI application — wires concrete implementations to port interfaces."""
 
 import os
+import sys
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from loguru import logger
+
+# Configure loguru at import time (before any other module logs) so the
+# LOG_LEVEL env var controls verbosity. Default INFO.
+logger.remove()
+logger.add(sys.stderr, level=os.environ.get("LOG_LEVEL", "INFO").upper())
 
 from .config import (
     ANTHROPIC_API_KEY,

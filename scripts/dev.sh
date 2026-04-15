@@ -3,6 +3,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Optional first argument sets the backend log level (default INFO).
+# Usage: ./scripts/dev.sh [DEBUG|INFO|WARNING|ERROR]
+export LOG_LEVEL="${1:-INFO}"
+echo "Backend LOG_LEVEL=$LOG_LEVEL"
+
 # Kill any existing backend/frontend processes
 pkill -f 'uvicorn backend' 2>/dev/null || true
 pkill -f 'vite.*5173' 2>/dev/null || true
