@@ -237,34 +237,34 @@ class ClaudeSDKClientAdapter:
 
     async def receive_response(self) -> AsyncIterator[SDKEvent]:
         async for msg in self._client.receive_response():
-            if isinstance(msg, StreamEvent):
-                # StreamEvents carry deltas; logged per-event at DEBUG inside
-                # _handle_stream_event to avoid spamming INFO with fragments.
-                for event in self._handle_stream_event(msg):
-                    yield event
-            elif isinstance(msg, AssistantMessage):
-                logger.info("sdk AssistantMessage: {}", msg)
-                # Usually just model/usage metadata + tool results, because text/
-                # thinking/tool_use come via stream events. When the stream is
-                # incomplete (e.g. stream dies after thinking deltas on some
-                # models), the adapter reconciles against the buffered content
-                # and emits whatever the stream didn't cover.
-                for event in self._translate_assistant_meta(msg):
-                    yield event
-            elif isinstance(msg, UserMessage):
-                logger.info("sdk UserMessage: {}", msg)
-                for event in _translate_user(msg):
-                    yield event
-            elif isinstance(msg, ResultMessage):
-                logger.info("sdk ResultMessage: {}", msg)
-                yield ResultEvent(
-                    session_id=msg.session_id,
-                    duration_ms=msg.duration_ms,
-                    total_cost_usd=msg.total_cost_usd or 0.0,
-                    num_turns=msg.num_turns,
-                    is_error=msg.is_error,
-                    created_files=self.pop_created_files(),
-                )
+            events: list[SDKEvent]
+            match msg:
+                case StreamEvent():
+                    events = self._handle_stream_event(msg)
+                case AssistantMessage():
+                    logger.info("sdk AssistantMessage: blocks={}", _block_summary(msg.content))
+                    events = self._translate_assistant_meta(msg)
+                case UserMessage():
+                    logger.info("sdk UserMessage: blocks={}",
+                                _block_summary(msg.content) if isinstance(msg.content, list) else "str")
+                    events = _translate_user(msg)
+                case ResultMessage():
+                    logger.info(
+                        "sdk ResultMessage: duration_ms={} cost=${:.4f} turns={} error={}",
+                        msg.duration_ms, msg.total_cost_usd or 0.0, msg.num_turns, msg.is_error,
+                    )
+                    events = [ResultEvent(
+                        session_id=msg.session_id,
+                        duration_ms=msg.duration_ms,
+                        total_cost_usd=msg.total_cost_usd or 0.0,
+                        num_turns=msg.num_turns,
+                        is_error=msg.is_error,
+                        created_files=self.pop_created_files(),
+                    )]
+                case _:
+                    events = []
+            for event in events:
+                yield event
 
     # -- StreamEvent dispatch -----------------------------------------------
 
@@ -438,6 +438,27 @@ class ClaudeSDKClientAdapter:
                     message_id=self._current_message_id,
                 ))
         return events
+
+
+def _block_summary(content: list[Any]) -> str:
+    """One-line description of a content-block list for logging."""
+    def preview(s: str) -> str:
+        head = s[:15].replace("\n", " ")
+        return f'"{head}{"…" if len(s) > 15 else ""}"'
+
+    parts: list[str] = []
+    for b in content:
+        if isinstance(b, TextBlock):
+            parts.append(f"text({len(b.text)},{preview(b.text)})")
+        elif isinstance(b, ThinkingBlock):
+            parts.append(f"thinking({len(b.thinking)},{preview(b.thinking)})")
+        elif isinstance(b, ToolUseBlock):
+            parts.append(f"tool_use({b.name},id={b.id})")
+        elif isinstance(b, ToolResultBlock):
+            parts.append(f"tool_result({b.tool_use_id})")
+        else:
+            parts.append(type(b).__name__)
+    return "[" + ",".join(parts) + "]"
 
 
 def _translate_user(msg: UserMessage) -> list[SDKEvent]:
