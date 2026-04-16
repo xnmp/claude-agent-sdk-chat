@@ -164,7 +164,15 @@ class ClaudeSDKClientAdapter:
 
     async def connect(self) -> None:
         logger.debug("sdk adapter: connect")
-        await self._client.connect()
+        try:
+            await self._client.connect()
+        except Exception as exc:
+            logger.error(
+                "sdk adapter: connect failed — {} | stderr={}",
+                exc,
+                getattr(exc, "stderr", None) or getattr(exc, "error_output", None) or "N/A",
+            )
+            raise
 
     async def query(self, content: str) -> None:
         logger.debug("sdk adapter: query len={}", len(content))

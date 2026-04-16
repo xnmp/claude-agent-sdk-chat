@@ -100,6 +100,11 @@ def _build_app(api_key: str, auth_token: str, upstream_url: str) -> Starlette:
             try:
                 async for chunk in upstream_resp.aiter_raw():
                     yield chunk
+            except httpx.RemoteProtocolError as exc:
+                logger.warning(
+                    "auth proxy: upstream closed connection mid-stream (%s %s): %s",
+                    request.method, request.url.path, exc,
+                )
             finally:
                 await upstream_resp.aclose()
 
