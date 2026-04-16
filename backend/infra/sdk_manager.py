@@ -179,27 +179,16 @@ class SDKManager:
         self._last_access: dict[str, float] = {}
         self._idle_ttl = idle_ttl
 
-    async def create(
+    def _build_options(
         self,
         session_id: str,
-        resume: bool = False,
-    ) -> ClaudeSDKClientAdapter:
-        await self._evict_idle()
+        resume: bool,
+    ) -> tuple[ClaudeAgentOptions, dict[str, Any], AskUserBridge]:
+        """Build ``ClaudeAgentOptions`` and session-scoped resources.
 
-        if session_id in self._clients:
-            logger.debug("sdk manager: reuse cached client session={}", session_id)
-            self._last_access[session_id] = _now()
-            return self._clients[session_id]
-
-        logger.info(
-            "sdk manager: creating client session={} resume={} model={}",
-            session_id, resume, ANTHROPIC_MODEL or "<default>",
-        )
-
-        # Per-session subdirectories under shared output roots. The FastAPI
-        # static mount still serves the whole AGENT_CWD/output tree at
-        # /api/output, so tracked files are reported as "<session_id>/<name>"
-        # via hooks' track_root and resolve via the URL scheme unchanged.
+        Returns (options, hook_config, askuser_bridge) so the caller can
+        wire up the adapter without knowing the construction details.
+        """
         output_root = os.path.join(AGENT_CWD, "output")
         scripts_root = os.path.join(AGENT_CWD, "output_scripts")
         output_dir = os.path.join(output_root, session_id)
@@ -208,6 +197,7 @@ class SDKManager:
         docs_dir = os.path.join(AGENT_CWD, "docs")
         for d in [output_dir, scripts_dir, uploads_dir, docs_dir]:
             os.makedirs(d, exist_ok=True)
+
         hook_config = make_hooks(
             output_dir,
             scripts_dir,
@@ -220,9 +210,6 @@ class SDKManager:
             track_root=output_root,
         )
 
-        # Per-session askuser bridge — its in-process MCP server holds a
-        # reference to a per-session asyncio future, so a fresh bridge (and
-        # fresh server config) is built for every new session.
         askuser_bridge = AskUserBridge()
         mcp_servers: dict[str, Any] = {
             **_MCP_SERVERS,
@@ -244,16 +231,33 @@ class SDKManager:
             mcp_servers=mcp_servers,  # type: ignore[arg-type]
             hooks=hook_config["hooks"],
             env=_build_agent_env(),
-            # Stream raw Anthropic API events alongside the buffered
-            # AssistantMessage so the WS layer can forward text/thinking deltas
-            # to the UI as they arrive instead of buffering until each block is
-            # complete.
             include_partial_messages=True,
         )
         if resume:
             options.resume = session_id
         else:
             options.session_id = session_id
+
+        return options, hook_config, askuser_bridge
+
+    async def create(
+        self,
+        session_id: str,
+        resume: bool = False,
+    ) -> ClaudeSDKClientAdapter:
+        await self._evict_idle()
+
+        if session_id in self._clients:
+            logger.debug("sdk manager: reuse cached client session={}", session_id)
+            self._last_access[session_id] = _now()
+            return self._clients[session_id]
+
+        logger.info(
+            "sdk manager: creating client session={} resume={} model={}",
+            session_id, resume, ANTHROPIC_MODEL or "<default>",
+        )
+
+        options, hook_config, askuser_bridge = self._build_options(session_id, resume)
 
         client = ClaudeSDKClient(options=options)
         adapter = ClaudeSDKClientAdapter(
@@ -262,8 +266,8 @@ class SDKManager:
         self._clients[session_id] = adapter
         self._last_access[session_id] = _now()
         logger.info(
-            "sdk manager: client ready session={} output_dir={} active_sessions={}",
-            session_id, output_dir, len(self._clients),
+            "sdk manager: client ready session={} active_sessions={}",
+            session_id, len(self._clients),
         )
         return adapter
 
