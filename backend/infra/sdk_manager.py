@@ -164,6 +164,18 @@ def _load_system_prompt(output_dir: str, scripts_dir: str) -> str:
     return template.replace("{output_dir}", output_dir).replace("{scripts_dir}", scripts_dir)
 
 
+def _log_cli_stderr(line: str) -> None:
+    """Forward a line of Claude CLI stderr to our logger.
+
+    With ``--debug-to-stderr`` the CLI emits MCP subprocess stdout/stderr and
+    connection diagnostics here — "MCP server failed to connect", tracebacks
+    from a broken server module, etc. Routing through loguru means they land
+    in the same stream as the rest of the backend logs, tagged so they're
+    easy to grep out.
+    """
+    logger.warning("claude-cli stderr: {}", line)
+
+
 _DEFAULT_IDLE_TTL = 30 * 60  # 30 minutes
 
 
@@ -232,6 +244,13 @@ class SDKManager:
             hooks=hook_config["hooks"],
             env=_build_agent_env(),
             include_partial_messages=True,
+            # Surface Claude CLI stderr (including MCP subprocess startup
+            # errors) into our logs. Paired with --debug-to-stderr so the
+            # CLI actually emits MCP connection diagnostics instead of
+            # swallowing them — the SDK transport only pipes stderr when
+            # *both* a callback is set and the debug flag is present.
+            stderr=_log_cli_stderr,
+            extra_args={"debug-to-stderr": None},
         )
         if resume:
             options.resume = session_id

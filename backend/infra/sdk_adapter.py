@@ -37,6 +37,7 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     ResultMessage,
     StreamEvent,
+    SystemMessage,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
@@ -220,6 +221,9 @@ class ClaudeSDKClientAdapter:
                         is_error=msg.is_error,
                         created_files=self.pop_created_files(),
                     )]
+                case SystemMessage():
+                    _log_system_message(msg)
+                    events = []
                 case _:
                     events = []
             for event in events:
@@ -413,6 +417,35 @@ class ClaudeSDKClientAdapter:
                     message_id=self._current_message_id,
                 ))
         return events
+
+
+def _log_system_message(msg: SystemMessage) -> None:
+    """Log SystemMessages, with extra scrutiny for the init payload.
+
+    The ``init`` SystemMessage fires once at the start of a session and
+    includes ``mcp_servers`` — a list of ``{"name": ..., "status": ...}``
+    dicts reporting whether each registered MCP server connected. Any
+    non-``connected`` status means the server failed to load and its tools
+    are unavailable for the rest of the session; we log those at ERROR so
+    they're impossible to miss.
+    """
+    if msg.subtype != "init":
+        logger.debug("sdk SystemMessage: subtype={}", msg.subtype)
+        return
+
+    servers = msg.data.get("mcp_servers") or []
+    connected = [s for s in servers if s.get("status") == "connected"]
+    failed = [s for s in servers if s.get("status") != "connected"]
+    logger.info(
+        "sdk init: mcp_servers connected={} failed={}",
+        [s.get("name") for s in connected],
+        [(s.get("name"), s.get("status")) for s in failed],
+    )
+    for s in failed:
+        logger.error(
+            "MCP server failed to connect: name={} status={} (tools unavailable for this session)",
+            s.get("name"), s.get("status"),
+        )
 
 
 def _translate_user(msg: UserMessage) -> list[SDKEvent]:
